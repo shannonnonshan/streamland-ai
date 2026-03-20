@@ -1,0 +1,24 @@
+# Core Dependencies
+torch>=2.0.0
+transformers>=4.30.0
+librosa>=0.10.0
+numpy>=1.24.0
+
+# API
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+pydantic>=2.0.0
+
+# Hugging Face
+huggingface_hub>=0.17.0
+
+# Development (optional)
+pytest>=7.4.0
+pytest-cov>=4.1.0
+black>=23.9.0
+flake8>=6.0.0
+ipython>=8.15.0
+
+# Utilities
+python-dotenv>=1.0.0
+tqdm>=4.66.0
