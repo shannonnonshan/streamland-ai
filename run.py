@@ -1,59 +1,54 @@
-import warnings
-warnings.filterwarnings("ignore")
+"""
+StreamLand AI - Test Hugging Face Model
+Purpose: Test script for Whisper model loaded from Hugging Face Hub
+Inputs: Test audio files from utils/data/audio/
+Output: Transcription results
+"""
 
-import torch
-from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
-from transformers.utils import logging as hf_logging
-import librosa
-import numpy as np
+import os
+import sys
+from dotenv import load_dotenv
+from models.whisper.interface import WhisperModel
 
-hf_logging.set_verbosity_error()
-torch.set_num_threads(1)
+load_dotenv()
 
-def test_whisper(audio_file):
 
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-
-    model_id = "models/whisper/model/whisper-finetuned"
-
-    model = AutoModelForSpeechSeq2Seq.from_pretrained(
-        model_id,
-        torch_dtype=torch_dtype,
-        low_cpu_mem_usage=True
-    ).to(device)
-
-    processor = AutoProcessor.from_pretrained(model_id)
-
-    samples, sr = librosa.load(audio_file, sr=16000)
-
-    chunk_length = 30 * sr
-    chunks = [samples[i:i + chunk_length] for i in range(0, len(samples), chunk_length)]
-
-    full_transcript = []
-
-    for chunk in chunks:
-
-        inputs = processor(
-            chunk,
-            sampling_rate=16000,
-            return_tensors="pt"
-        ).input_features.to(device, torch_dtype)
-
-        with torch.no_grad():
-            predicted_ids = model.generate(inputs)
-
-        text = processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
-
-        full_transcript.append(text)
-
-    return " ".join(full_transcript)
+def test_transcribe(audio_file, model):
+    """Transcribe audio file using loaded model."""
+    print(f"\n[TEST] Transcribing: {audio_file}")
+    
+    try:
+        result = model.transcribe(audio_file)
+        print(f"[RESULT] {result}\n")
+        return result
+        
+    except Exception as e:
+        print(f"[ERROR] {e}\n")
+        return None
 
 
 if __name__ == "__main__":
-
-    result1 = test_whisper("utils/data/audio/testaudio.mp3")
-    print(f"[Test 1] {result1}\n")
-
-    result2 = test_whisper("utils/data/audio/testaudio-vn.mp3")
-    print(f"[Test 2] {result2}")
+    # Load model from Hugging Face Hub
+    model_path = os.getenv("WHISPER_MODEL_PATH", "shannonnonshan/streamland-whisper")
+    use_hf = os.getenv("WHISPER_USE_HF", "true").lower() == "true"
+    
+    print(f"[INFO] Loading model from {'HF Hub' if use_hf else 'Local'}: {model_path}")
+    
+    try:
+        model = WhisperModel(model_path=model_path, from_hf=use_hf)
+        print("[SUCCESS] Model loaded!\n")
+    except Exception as e:
+        print(f"[ERROR] Failed to load model: {e}")
+        sys.exit(1)
+    
+    # Test with available audio files
+    audio_files = [
+        "utils/data/audio/testaudio.mp3",
+        "utils/data/audio/testaudio-vn.mp3"
+    ]
+    
+    for audio_file in audio_files:
+        if os.path.exists(audio_file):
+            test_transcribe(audio_file, model)
+        else:
+            print(f"[SKIP] File not found: {audio_file}")
