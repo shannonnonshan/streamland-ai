@@ -74,7 +74,18 @@ python setup.py
 
 # Or manual:
 cp .env.example .env
-# Edit .env: add HF_TOKEN and HF_REPO_ID
+# Edit .env: add HF_TOKEN, HF_USERNAME, and HF_REPO_BASE
+```
+
+The repo for each model is built automatically as `HF_USERNAME/HF_REPO_BASE-<model_name>`:
+
+```
+HF_TOKEN=hf_xxxxx
+HF_USERNAME=shannonnonshan
+HF_REPO_BASE=streamland
+# → shannonnonshan/streamland-whisper
+# → shannonnonshan/streamland-tts
+# → shannonnonshan/streamland-wav2vec2
 ```
 
 Get token from: https://huggingface.co/settings/tokens (create with 'write' permission)
@@ -82,7 +93,9 @@ Get token from: https://huggingface.co/settings/tokens (create with 'write' perm
 Push model:
 
 ```bash
-python push_to_huggingface.py username/whisper-finetuned
+python push_to_huggingface.py whisper
+python push_to_huggingface.py tts
+python push_to_huggingface.py whisper --public
 ```
 
 ## API Server
@@ -109,11 +122,13 @@ python run.py utils/data/audio/sample.wav --hf  # Use HF model
 Via `.env` file or environment variables:
 
 ```bash
+HF_TOKEN=hf_xxxxx
+HF_USERNAME=shannonnonshan
+HF_REPO_BASE=streamland
 MODEL_PATH=models/whisper/model/whisper-finetuned
 MODEL_USE_HF=false
 API_HOST=0.0.0.0
 API_PORT=8000
-HF_TOKEN=hf_xxxxx
 ```
 
 See `.env.example` for all options.

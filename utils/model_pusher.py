@@ -239,13 +239,20 @@ if __name__ == "__main__":
     repo_base = None
     
     try:
-        for i, arg in enumerate(sys.argv[2:]):
-            if arg == "--custom-path" and i + 2 < len(sys.argv):
-                custom_path = sys.argv[i + 3]
-            elif arg == "--username" and i + 2 < len(sys.argv):
-                username = sys.argv[i + 3]
-            elif arg == "--repo-base" and i + 2 < len(sys.argv):
-                repo_base = sys.argv[i + 3]
+        i = 2
+        while i < len(sys.argv):
+            arg = sys.argv[i]
+            if arg == "--custom-path" and i + 1 < len(sys.argv):
+                custom_path = sys.argv[i + 1]
+                i += 2
+            elif arg == "--username" and i + 1 < len(sys.argv):
+                username = sys.argv[i + 1]
+                i += 2
+            elif arg == "--repo-base" and i + 1 < len(sys.argv):
+                repo_base = sys.argv[i + 1]
+                i += 2
+            else:
+                i += 1
     except:
         pass
     

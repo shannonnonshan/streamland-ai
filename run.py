@@ -77,7 +77,8 @@ def main():
         print("Environment variables:")
         print("  MODEL_PATH          - Local model path (default: models/whisper/model/whisper-finetuned)")
         print("  MODEL_USE_HF        - Use HF Hub if 'true' (default: false)")
-        print("  HF_REPO_ID          - HF repo ID (format: username/model-name)")
+        print("  HF_USERNAME         - HF username")
+        print("  HF_REPO_BASE        - Repo base name (repos created as HF_USERNAME/HF_REPO_BASE-<model_name>)")
         print()
         print("Example:")
         print("  python run.py utils/data/audio/sample.wav")
@@ -87,12 +88,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-if __name__ == "__main__":
-
-    result1 = test_whisper("utils/data/audio/testaudio.mp3")
-    print(f"[Test 1] {result1}\n")
-
-    result2 = test_whisper("utils/data/audio/testaudio-vn.mp3")
-    print(f"[Test 2] {result2}")

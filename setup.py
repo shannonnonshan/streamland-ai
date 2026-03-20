@@ -38,18 +38,27 @@ def setup_env():
         print("[ERROR] Invalid HF token format. Must start with 'hf_'")
         return False
     
-    # Get repo ID
-    hf_repo = input("Enter your HF repo ID (username/model-name): ").strip()
-    if "/" not in hf_repo:
-        print("[ERROR] Invalid repo ID format. Use: username/model-name")
+    # Get username and repo base
+    hf_username = input("Enter your HF username: ").strip()
+    if not hf_username:
+        print("[ERROR] Username cannot be empty")
         return False
+    
+    hf_repo_base = input("Enter the repo base name (e.g. streamland): ").strip()
+    if not hf_repo_base:
+        print("[ERROR] Repo base name cannot be empty")
+        return False
+    
+    print(f"\n[INFO] Repos will be created as: {hf_username}/{hf_repo_base}-<model_name>")
+    print(f"       e.g. {hf_username}/{hf_repo_base}-whisper")
     
     # Create .env file
     try:
         with open(env_file, 'w') as f:
             f.write(f"# Hugging Face Configuration\n")
             f.write(f"HF_TOKEN={hf_token}\n")
-            f.write(f"HF_REPO_ID={hf_repo}\n")
+            f.write(f"HF_USERNAME={hf_username}\n")
+            f.write(f"HF_REPO_BASE={hf_repo_base}\n")
             f.write(f"\n")
             f.write(f"# Model Configuration\n")
             f.write(f"MODEL_PATH=models/whisper/model/whisper-finetuned\n")
@@ -69,7 +78,8 @@ def setup_env():
             f.write(f"TORCH_DTYPE=float16\n")
         
         print("\n[INFO] .env file created successfully")
-        print(f"[INFO] Repo ID: {hf_repo}")
+        print(f"[INFO] HF Username:  {hf_username}")
+        print(f"[INFO] Repo base:    {hf_repo_base}")
         return True
     
     except Exception as e:
