@@ -1,6 +1,7 @@
 """
-StreamLand AI - Test Hugging Face Model
-Purpose: Test script for Whisper model loaded from Hugging Face Hub
+StreamLand AI - Test Model
+Purpose: Test script for models loaded from Hugging Face Hub or local disk
+Supports: Dynamic model selection via MODEL_TYPE and MODEL_PATH env vars
 Inputs: Test audio files from utils/data/audio/
 Output: Transcription results
 """
@@ -8,7 +9,7 @@ Output: Transcription results
 import os
 import sys
 from dotenv import load_dotenv
-from models.whisper.interface import WhisperModel
+from utils.model_loader import ModelLoader
 
 load_dotenv()
 
@@ -28,18 +29,24 @@ def test_transcribe(audio_file, model):
 
 
 if __name__ == "__main__":
-    # Load model from Hugging Face Hub
-    model_path = os.getenv("WHISPER_MODEL_PATH", "shannonnonshan/streamland-whisper")
-    use_hf = os.getenv("WHISPER_USE_HF", "true").lower() == "true"
+    # Try to load model from MODEL_TYPE env var, fallback to Whisper
+    model = ModelLoader.from_env()
     
-    print(f"[INFO] Loading model from {'HF Hub' if use_hf else 'Local'}: {model_path}")
-    
-    try:
-        model = WhisperModel(model_path=model_path, from_hf=use_hf)
-        print("[SUCCESS] Model loaded!\n")
-    except Exception as e:
-        print(f"[ERROR] Failed to load model: {e}")
-        sys.exit(1)
+    if model is None:
+        # Fallback to Whisper if not configured
+        print("[INFO] No MODEL_TYPE specified. Using default Whisper model.")
+        model_path = os.getenv("WHISPER_MODEL_PATH", "shannonnonshan/streamland-whisper")
+        use_hf = os.getenv("WHISPER_USE_HF", "true").lower() == "true"
+        print(f"[INFO] Loading model from {'HF Hub' if use_hf else 'Local'}: {model_path}")
+        
+        try:
+            model = ModelLoader.load_model("whisper", model_path=model_path, from_hf=use_hf)
+            print("[SUCCESS] Model loaded!\n")
+        except Exception as e:
+            print(f"[ERROR] Failed to load model: {e}")
+            sys.exit(1)
+    else:
+        print(f"[SUCCESS] Model loaded: {model.info()}\n")
     
     # Test with available audio files
     audio_files = [

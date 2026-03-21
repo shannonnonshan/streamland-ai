@@ -1,93 +1,136 @@
 """
 StreamLand AI - API Server
-Purpose: RESTful API for speech-to-text transcription using Whisper model
-Supports loading model from local disk or Hugging Face Hub
-Endpoints: /health, /transcribe
+Purpose: Multi-model API for speech, text, embeddings, and content moderation
+Supports 5 models: Whisper, Embeddings, Llama, Moderation, Summarization
+Dynamic model loading from Hugging Face Hub or local disk
 """
 
 import os
-from fastapi import FastAPI, HTTPException, UploadFile, File
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-import librosa
-import numpy as np
-from models.whisper.interface import WhisperModel
+from utils.model_loader import ModelLoader
+from utils.config import ModelConfig
+from api.endpoints import transcribe, search, chat, recommend, moderation
 
 load_dotenv()
 
 app = FastAPI(
     title="StreamLand AI API",
-    description="Speech-to-Text Processing with Whisper",
-    version="0.1.0"
+    description="Multi-model AI API for speech, text, embeddings, and content moderation",
+    version="1.0.0"
 )
 
-# Initialize model
-model = None
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-def init_model():
-    """Initialize the model on startup."""
-    global model
+# Load models
+models = {}
+
+
+def init_models():
+    """Initialize all models on startup."""
+    global models
     try:
-        model_path = os.getenv("WHISPER_MODEL_PATH", "shannonnonshan/streamland-whisper")
-        use_hf = os.getenv("WHISPER_USE_HF", "true").lower() == "true"
-        model = WhisperModel(model_path=model_path, from_hf=use_hf)
-        print(f"✓ Model loaded: {model_path}")
+        # Load Whisper (STT)
+        print("[INIT] Loading Whisper model...")
+        models["whisper"] = ModelLoader.load_model(
+            "whisper",
+            model_path=ModelConfig.WHISPER_MODEL,
+            from_hf=ModelConfig.WHISPER_USE_HF
+        )
+        print("✓ Whisper loaded")
+        
+        # Load Embeddings (Search & Recommend)
+        print("[INIT] Loading Embeddings model...")
+        models["embeddings"] = ModelLoader.load_model(
+            "embeddings",
+            model_path=ModelConfig.EMBEDDINGS_MODEL,
+            from_hf=ModelConfig.EMBEDDINGS_USE_HF
+        )
+        print("✓ Embeddings loaded")
+        
+        # Load LLama (Chat & RAG)
+        print("[INIT] Loading LLama model...")
+        models["llama"] = ModelLoader.load_model(
+            "llama",
+            model_path=ModelConfig.LLAMA_MODEL,
+            from_hf=ModelConfig.LLAMA_USE_HF
+        )
+        print("✓ LLama loaded")
+        
+        # Load Moderation
+        print("[INIT] Loading Moderation model...")
+        models["moderation"] = ModelLoader.load_model(
+            "moderation",
+            model_path=ModelConfig.MODERATION_MODEL,
+            from_hf=ModelConfig.MODERATION_USE_HF
+        )
+        print("✓ Moderation loaded")
+        
+        # Load Summarization
+        print("[INIT] Loading Summarization model...")
+        models["summarization"] = ModelLoader.load_model(
+            "summarization",
+            model_path=ModelConfig.SUMMARIZATION_MODEL,
+            from_hf=ModelConfig.SUMMARIZATION_USE_HF
+        )
+        print("✓ Summarization loaded")
+        
+        print("\n✓ All models loaded successfully!")
     except Exception as e:
-        print(f"✗ Failed to load model: {e}")
+        print(f"✗ Failed to load models: {e}")
 
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize model on server startup."""
-    init_model()
+    """Initialize models on server startup."""
+    init_models()
+
+
+# Register routers
+app.include_router(transcribe.router)
+app.include_router(search.router)
+app.include_router(chat.router)
+app.include_router(recommend.router)
+app.include_router(moderation.router)
 
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    model_status = "ready" if model else "failed"
     return {
         "status": "ok",
-        "model": model_status,
-        "version": "0.1.0"
+        "models_loaded": list(models.keys()),
+        "total_models": len(models),
+        "version": "1.0.0"
     }
 
 
-@app.post("/transcribe")
-async def transcribe(file: UploadFile = File(...)):
-    """Transcribe audio file using Whisper model."""
-    if not model:
-        raise HTTPException(status_code=500, detail="Model not initialized")
-    
-    try:
-        # Save temp file
-        temp_path = f"temp_{file.filename}"
-        with open(temp_path, "wb") as f:
-            f.write(await file.read())
-        
-        # Load and process audio
-        audio, sr = librosa.load(temp_path, sr=16000)
-        
-        # Transcribe
-        result = model.transcribe(audio)
-        
-        # Cleanup
-        os.remove(temp_path)
-        
-        return {
-            "status": "success",
-            "filename": file.filename,
-            "transcript": result["text"],
-            "language": result.get("language", "unknown")
-        }
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+@app.get("/models")
+async def list_models():
+    """List loaded models with their info."""
+    return {
+        "available": [
+            {"name": "whisper", "type": "STT", "purpose": "Speech-to-Text"},
+            {"name": "embeddings", "type": "Embeddings", "purpose": "Search & Recommendations"},
+            {"name": "llama", "type": "LLM", "purpose": "Chat & RAG"},
+            {"name": "moderation", "type": "Safety", "purpose": "Content Moderation"},
+            {"name": "summarization", "type": "NLG", "purpose": "Text Summarization"},
+        ],
+        "loaded": {key: model.info() for key, model in models.items()}
+    }
 
 
 if __name__ == "__main__":
     import uvicorn
-    host = os.getenv("API_HOST", "0.0.0.0")
-    port = int(os.getenv("API_PORT", "8000"))
-    debug = os.getenv("API_DEBUG", "false").lower() == "true"
+    from utils.config import ModelConfig
     
-    uvicorn.run(app, host=host, port=port, reload=debug)
+    print(f"\n🚀 Starting StreamLand AI API on {ModelConfig.API_HOST}:{ModelConfig.API_PORT}")
+    uvicorn.run(app, host=ModelConfig.API_HOST, port=ModelConfig.API_PORT, reload=False)
