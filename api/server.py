@@ -1,23 +1,23 @@
 """
 StreamLand AI - API Server
 Purpose: Multi-model API for speech, text, embeddings, and content moderation
-Supports 5 models: Whisper, Embeddings, Llama, Moderation, Summarization
+Supports: Whisper (STT), Embeddings, LLama, Moderation, Summarization
 Dynamic model loading from Hugging Face Hub or local disk
 """
 
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from utils.model_loader import ModelLoader
 from utils.config import ModelConfig
-from api.endpoints import transcribe, search, chat, recommend, moderation
+from api.endpoints import transcribe, search, chat, recommend, moderation, summarize, pipeline
 
 load_dotenv()
 
 app = FastAPI(
     title="StreamLand AI API",
-    description="Multi-model AI API for speech, text, embeddings, and content moderation",
+    description="Multi-model AI API for transcription, summarization, search, chat, and content moderation",
     version="1.0.0"
 )
 
@@ -94,12 +94,30 @@ async def startup_event():
     init_models()
 
 
-# Register routers
+# Dependency functions for model injection
+def get_whisper_model():
+    """Get Whisper model."""
+    return models.get("whisper")
+
+
+def get_summarization_model():
+    """Get Summarization model."""
+    return models.get("summarization")
+
+
+def get_all_models():
+    """Get all models."""
+    return models
+
+
+# Register routers with dependencies
 app.include_router(transcribe.router)
 app.include_router(search.router)
 app.include_router(chat.router)
 app.include_router(recommend.router)
 app.include_router(moderation.router)
+app.include_router(summarize.router)
+app.include_router(pipeline.router)
 
 
 @app.get("/health")
