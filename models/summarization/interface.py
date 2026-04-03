@@ -28,10 +28,10 @@ class SummarizationModel:
             print(f"[INFO] Clearing cache: {self.cache_dir}")
             shutil.rmtree(self.cache_dir, ignore_errors=True)
 
-    def _load_from_cache(self, force_download=False):
+    def _load_from_cache(self, force_download=False, use_fast=True):
         tokenizer_kwargs = {
             "token": HF_TOKEN if HF_TOKEN else None,
-            "use_fast": False,
+            "use_fast": use_fast,
             "revision": "main",
             "cache_dir": self.cache_dir,
         }
@@ -68,24 +68,42 @@ class SummarizationModel:
     def _load_model(self):
         print(f"[INFO] Loading model: {self.model_path}")
 
-        # ---- TRY 1: NORMAL LOAD ----
+        # ---- TRY 1: FAST TOKENIZER (avoids spiece.model binary parsing) ----
         try:
-            self._load_from_cache(force_download=False)
-            print("[SUCCESS] Loaded model normally")
+            self._load_from_cache(force_download=False, use_fast=True)
+            print("[SUCCESS] Loaded model normally (fast tokenizer)")
             return
 
         except Exception as e:
-            print(f"[WARNING] First load failed: {e}")
+            print(f"[WARNING] Fast tokenizer load failed: {e}")
 
-        # ---- TRY 2: CLEAR CACHE + FORCE DOWNLOAD ----
+        # ---- TRY 2: SLOW TOKENIZER ----
         try:
-            self._clear_cache()
-            self._load_from_cache(force_download=True)
-            print("[SUCCESS] Loaded after cache reset")
+            self._load_from_cache(force_download=False, use_fast=False)
+            print("[SUCCESS] Loaded model normally (slow tokenizer)")
             return
 
-        except Exception as e2:
-            print(f"[ERROR] Load failed completely: {e2}")
+        except Exception as e:
+            print(f"[WARNING] Slow tokenizer load failed: {e}")
+
+        # ---- TRY 3: CLEAR CACHE + FORCE DOWNLOAD (fast tokenizer) ----
+        try:
+            self._clear_cache()
+            self._load_from_cache(force_download=True, use_fast=True)
+            print("[SUCCESS] Loaded after cache reset (fast tokenizer)")
+            return
+
+        except Exception as e:
+            print(f"[WARNING] Fast tokenizer load after cache reset failed: {e}")
+
+        # ---- TRY 4: CLEAR CACHE + FORCE DOWNLOAD (slow tokenizer) ----
+        try:
+            self._load_from_cache(force_download=True, use_fast=False)
+            print("[SUCCESS] Loaded after cache reset (slow tokenizer)")
+            return
+
+        except Exception as e:
+            print(f"[ERROR] mT5 load failed: {e}")
             raise
 
     def summarize(self, text, max_length=150, min_length=50):
