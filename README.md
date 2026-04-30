@@ -39,10 +39,40 @@ python -m api.server
 
 **Push Model:** `python utils/model_pusher.py whisper`
 
-## API Endpoints
+## API Endpoints (Working)
 
-- `GET /health` - Health check
-- `POST /transcribe` - Transcribe audio
+Base URL (local): `http://127.0.0.1:8000`
+
+### Verified working now
+
+- `GET /health` - Health check, xem API đang chạy và các model đã load.
+- `GET /models` - Liệt kê model available + model đã load.
+- `POST /transcribe` - Nhận file audio và trả transcript bằng Whisper.
+
+`POST /transcribe` hiện trả thêm `timestamps` theo một format duy nhất: mỗi item có `start` và `text` (giây bắt đầu nói nội dung nào).
+
+### Available when model is loaded
+
+- `POST /summarize` - Tóm tắt văn bản (cần model `summarization` load thành công).
+
+### Quick test commands
+
+```bash
+# Health
+curl -X GET "http://127.0.0.1:8000/health"
+
+# Models
+curl -X GET "http://127.0.0.1:8000/models"
+
+# Transcribe
+curl -X POST "http://127.0.0.1:8000/transcribe" \
+	-F "file=@utils/data/audio/testaudio-vn.mp3"
+
+# Summarize
+curl -X POST "http://127.0.0.1:8000/summarize" \
+	-H "Content-Type: application/json" \
+	-d "{\"text\":\"Your long text here\"}"
+```
 
 ## Configuration
 

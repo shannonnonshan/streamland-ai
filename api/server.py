@@ -11,7 +11,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from utils.model_loader import ModelLoader
 from utils.config import ModelConfig
-from api.endpoints import transcribe, search, chat, recommend, moderation
+from api.endpoints import transcribe, search, chat, recommend, moderation, summarize
+from api import model_registry
 
 load_dotenv()
 
@@ -30,17 +31,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load models
-models = {}
-
-
 def init_models():
     """Initialize all models on startup."""
-    global models
     try:
+        model_registry.models.clear()
+
         # Load Whisper (STT)
         print("[INIT] Loading Whisper model...")
-        models["whisper"] = ModelLoader.load_model(
+        model_registry.models["whisper"] = ModelLoader.load_model(
             "whisper",
             model_path=ModelConfig.WHISPER_MODEL,
             from_hf=ModelConfig.WHISPER_USE_HF
@@ -49,7 +47,7 @@ def init_models():
         
         # Load Embeddings (Search & Recommend)
         print("[INIT] Loading Embeddings model...")
-        models["embeddings"] = ModelLoader.load_model(
+        model_registry.models["embeddings"] = ModelLoader.load_model(
             "embeddings",
             model_path=ModelConfig.EMBEDDINGS_MODEL,
             from_hf=ModelConfig.EMBEDDINGS_USE_HF
@@ -58,7 +56,7 @@ def init_models():
         
         # Load LLama (Chat & RAG)
         print("[INIT] Loading LLama model...")
-        models["llama"] = ModelLoader.load_model(
+        model_registry.models["llama"] = ModelLoader.load_model(
             "llama",
             model_path=ModelConfig.LLAMA_MODEL,
             from_hf=ModelConfig.LLAMA_USE_HF
@@ -67,7 +65,7 @@ def init_models():
         
         # Load Moderation
         print("[INIT] Loading Moderation model...")
-        models["moderation"] = ModelLoader.load_model(
+        model_registry.models["moderation"] = ModelLoader.load_model(
             "moderation",
             model_path=ModelConfig.MODERATION_MODEL,
             from_hf=ModelConfig.MODERATION_USE_HF
@@ -76,7 +74,7 @@ def init_models():
         
         # Load Summarization
         print("[INIT] Loading Summarization model...")
-        models["summarization"] = ModelLoader.load_model(
+        model_registry.models["summarization"] = ModelLoader.load_model(
             "summarization",
             model_path=ModelConfig.SUMMARIZATION_MODEL,
             from_hf=ModelConfig.SUMMARIZATION_USE_HF
@@ -100,6 +98,7 @@ app.include_router(search.router)
 app.include_router(chat.router)
 app.include_router(recommend.router)
 app.include_router(moderation.router)
+app.include_router(summarize.router)
 
 
 @app.get("/health")
@@ -107,8 +106,8 @@ async def health_check():
     """Health check endpoint."""
     return {
         "status": "ok",
-        "models_loaded": list(models.keys()),
-        "total_models": len(models),
+        "models_loaded": list(model_registry.models.keys()),
+        "total_models": len(model_registry.models),
         "version": "1.0.0"
     }
 
@@ -124,7 +123,7 @@ async def list_models():
             {"name": "moderation", "type": "Safety", "purpose": "Content Moderation"},
             {"name": "summarization", "type": "NLG", "purpose": "Text Summarization"},
         ],
-        "loaded": {key: model.info() for key, model in models.items()}
+        "loaded": {key: model.info() for key, model in model_registry.models.items()}
     }
 
 
