@@ -1,11 +1,14 @@
 """Summarization endpoint."""
 
+import logging
+
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
 from api.dependencies import get_summarization_model
 
 router = APIRouter(prefix="/summarize", tags=["summarize"])
+logger = logging.getLogger(__name__)
 
 
 class SummarizeRequest(BaseModel):
@@ -27,6 +30,7 @@ async def summarize(request: SummarizeRequest, model=Depends(get_summarization_m
         )
 
     try:
+        logger.info("Summarize request received: input_length=%s", len(text))
         result = model.infer(text)
         if result is False:
             raise HTTPException(
@@ -49,6 +53,7 @@ async def summarize(request: SummarizeRequest, model=Depends(get_summarization_m
                 },
             )
 
+        logger.info("Summarize completed: input_length=%s summary_length=%s", len(text), len(summary))
         return {
             "status": "success",
             "data": {
@@ -60,6 +65,7 @@ async def summarize(request: SummarizeRequest, model=Depends(get_summarization_m
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("Summarize failed: input_length=%s", len(text))
         raise HTTPException(
             status_code=500,
             detail={

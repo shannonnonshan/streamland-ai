@@ -1,6 +1,8 @@
 import os
 import shutil
 import re
+import importlib
+import logging
 from typing import Any, Dict, Union, Optional
 
 import torch
@@ -11,6 +13,7 @@ from models.base import BaseModel
 
 
 HF_TOKEN = os.getenv("HF_TOKEN")
+logger = logging.getLogger(__name__)
 
 DEFAULT_CACHE_DIR = os.path.join(
     os.path.expanduser("~"),
@@ -30,7 +33,7 @@ class SummarizationModel(BaseModel):
         super().__init__(model_path or "shannonnonshan/bart-summarizer", from_hf)
 
         self.cache_dir = os.getenv("SUMMARIZATION_CACHE_DIR", DEFAULT_CACHE_DIR)
-        self.device = 0 if torch.cuda.is_available() else -1
+        self.device, self.device_label, self.torch_dtype, self.pipeline_device = self._resolve_device()
 
         self.tokenizer = None
         self.model = None
@@ -39,6 +42,87 @@ class SummarizationModel(BaseModel):
         self.current_pipeline_task = None
 
         self._load_model()
+
+    def _try_directml_device(self):
+        try:
+            torch_directml = importlib.import_module("torch_directml")
+            return torch_directml.device()
+        except Exception:
+            return None
+
+    def _resolve_device(self):
+        requested = os.getenv("SUMMARIZATION_DEVICE", "auto").strip().lower()
+        cuda_available = torch.cuda.is_available()
+        xpu_available = hasattr(torch, "xpu") and torch.xpu.is_available()
+        mps_available = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+
+        if requested not in {"auto", "cpu", "cuda", "xpu", "mps", "directml"}:
+            logger.warning(
+                "Invalid SUMMARIZATION_DEVICE=%s. Expected one of: auto, cpu, cuda, xpu, mps, directml. Falling back to auto.",
+                requested,
+            )
+            requested = "auto"
+
+        if requested == "cpu":
+            logger.info("Summarization device selected: cpu (SUMMARIZATION_DEVICE=cpu)")
+            return "cpu", "cpu", torch.float32, -1
+
+        if requested == "directml":
+            dml_device = self._try_directml_device()
+            if dml_device is not None:
+                logger.info("Summarization device selected: directml")
+                return dml_device, "directml", torch.float32, dml_device
+
+            logger.warning(
+                "SUMMARIZATION_DEVICE=directml but torch-directml is not available. Falling back to CPU."
+            )
+            return "cpu", "cpu", torch.float32, -1
+
+        if requested == "cuda":
+            if cuda_available:
+                device_name = torch.cuda.get_device_name(0)
+                logger.info("Summarization device selected: cuda:0 (%s)", device_name)
+                return "cuda:0", f"cuda:0 ({device_name})", torch.float16, 0
+
+            logger.warning("SUMMARIZATION_DEVICE=cuda but CUDA is not available. Falling back to CPU.")
+            return "cpu", "cpu", torch.float32, -1
+
+        if requested == "xpu":
+            if xpu_available:
+                logger.info("Summarization device selected: xpu:0")
+                return "xpu:0", "xpu:0", torch.float16, "xpu:0"
+
+            logger.warning("SUMMARIZATION_DEVICE=xpu but XPU is not available. Falling back to CPU.")
+            return "cpu", "cpu", torch.float32, -1
+
+        if requested == "mps":
+            if mps_available:
+                logger.info("Summarization device selected: mps")
+                return "mps", "mps", torch.float32, "mps"
+
+            logger.warning("SUMMARIZATION_DEVICE=mps but MPS is not available. Falling back to CPU.")
+            return "cpu", "cpu", torch.float32, -1
+
+        if cuda_available:
+            device_name = torch.cuda.get_device_name(0)
+            logger.info("Summarization device selected: cuda:0 (%s)", device_name)
+            return "cuda:0", f"cuda:0 ({device_name})", torch.float16, 0
+
+        if xpu_available:
+            logger.info("Summarization device selected: xpu:0")
+            return "xpu:0", "xpu:0", torch.float16, "xpu:0"
+
+        if mps_available:
+            logger.info("Summarization device selected: mps")
+            return "mps", "mps", torch.float32, "mps"
+
+        dml_device = self._try_directml_device()
+        if dml_device is not None:
+            logger.info("Summarization device selected: directml")
+            return dml_device, "directml", torch.float32, dml_device
+
+        logger.info("Summarization device selected: cpu (no accelerator backend available)")
+        return "cpu", "cpu", torch.float32, -1
 
     # -------------------------
     # Language detection
@@ -110,6 +194,7 @@ class SummarizationModel(BaseModel):
         model_kwargs = {
             "cache_dir": self.cache_dir,
             "force_download": force_download,
+            "torch_dtype": self.torch_dtype,
         }
 
         if HF_TOKEN:
@@ -147,9 +232,7 @@ class SummarizationModel(BaseModel):
             candidate,
             **model_kwargs
         )
-
-        if torch.cuda.is_available():
-            model = model.to("cuda")
+        model = model.to(self.device)
 
         self.tokenizer = tokenizer
         self.model = model
@@ -157,12 +240,15 @@ class SummarizationModel(BaseModel):
         pipeline_task = "summarization" if "bart" in candidate_lower else "text2text-generation"
 
         # Use task that matches model family output format.
-        self.summarizer = pipeline(
-            pipeline_task,
-            model=self.model,
-            tokenizer=self.tokenizer,
-            device=self.device,
-        )
+        pipeline_kwargs = {
+            "task": pipeline_task,
+            "model": self.model,
+            "tokenizer": self.tokenizer,
+        }
+        if self.pipeline_device is not None:
+            pipeline_kwargs["device"] = self.pipeline_device
+
+        self.summarizer = pipeline(**pipeline_kwargs)
 
         self.current_pipeline_task = pipeline_task
         self.model_path = candidate
@@ -170,10 +256,16 @@ class SummarizationModel(BaseModel):
     def _load_model(self):
         candidate = self.model_path
 
+        def _print_runtime():
+            print(
+                f"[INFO] Summarization runtime | device={self.device_label} | dtype={self.torch_dtype}"
+            )
+
         # Attempt 1
         try:
             self._load_candidate(candidate, force_download=False)
             print(f"[INFO] Loaded summarization model: {candidate}")
+            _print_runtime()
             return
         except Exception as e:
             print(f"[WARNING] First load failed: {e}")
@@ -188,6 +280,8 @@ class SummarizationModel(BaseModel):
             print(f"[INFO] Loaded after cache reset: {candidate}")
         except Exception as e:
             raise RuntimeError(f"Unable to load summarization model: {e}")
+
+        _print_runtime()
 
     # -------------------------
     # Inference

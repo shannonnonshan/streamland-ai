@@ -1,8 +1,11 @@
 import warnings
 import re
+import os
+import importlib
 import torch
 import numpy as np
 import librosa
+import logging
 from typing import Dict, Any, Union
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 from transformers.utils import logging as hf_logging
@@ -12,6 +15,7 @@ from ..base import BaseModel
 warnings.filterwarnings("ignore")
 hf_logging.set_verbosity_error()
 torch.set_num_threads(1)
+logger = logging.getLogger(__name__)
 
 
 SENTENCE_END_RE = re.compile(r"[.!?。！？]+(?:[\'\"\)\]]+)?\s*$")
@@ -21,9 +25,95 @@ MAX_TIMESTAMP_SEGMENT_SEC = 5.0
 class WhisperModel(BaseModel):
     def __init__(self, model_path: str, from_hf: bool = False):
         super().__init__(model_path=model_path, from_hf=from_hf)
-        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        self.torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+        self.device, self.device_label, self.torch_dtype = self._resolve_device()
         self._load_model()
+
+    def _resolve_device(self):
+        requested = os.getenv("WHISPER_DEVICE", "auto").strip().lower()
+        cuda_available = torch.cuda.is_available()
+        xpu_available = hasattr(torch, "xpu") and torch.xpu.is_available()
+        mps_available = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+
+        if requested not in {"auto", "cpu", "cuda", "xpu", "mps", "directml"}:
+            logger.warning(
+                "Invalid WHISPER_DEVICE=%s. Expected one of: auto, cpu, cuda, xpu, mps, directml. Falling back to auto.",
+                requested,
+            )
+            requested = "auto"
+
+        if requested == "cpu":
+            logger.info("Whisper device selected: cpu (WHISPER_DEVICE=cpu)")
+            return "cpu", "cpu", torch.float32
+
+        if requested == "directml":
+            dml_device = self._try_directml_device()
+            if dml_device is not None:
+                logger.info("Whisper device selected: directml")
+                return dml_device, "directml", torch.float32
+
+            else:
+                logger.warning(
+                    "WHISPER_DEVICE=directml but torch-directml is not available. Falling back to CPU."
+                )
+                return "cpu", "cpu", torch.float32
+
+        if requested == "cuda":
+            if cuda_available:
+                device_name = torch.cuda.get_device_name(0)
+                logger.info("Whisper device selected: cuda:0 (%s)", device_name)
+                return "cuda:0", f"cuda:0 ({device_name})", torch.float16
+
+            logger.warning(
+                "WHISPER_DEVICE=cuda but CUDA is not available. Falling back to CPU. "
+                "If you want GPU, install a CUDA-enabled PyTorch build and NVIDIA drivers."
+            )
+            return "cpu", "cpu", torch.float32
+
+        if requested == "xpu":
+            if xpu_available:
+                logger.info("Whisper device selected: xpu:0")
+                return "xpu:0", "xpu:0", torch.float16
+
+            logger.warning("WHISPER_DEVICE=xpu but XPU is not available. Falling back to CPU.")
+            return "cpu", "cpu", torch.float32
+
+        if requested == "mps":
+            if mps_available:
+                logger.info("Whisper device selected: mps")
+                return "mps", "mps", torch.float32
+
+            logger.warning("WHISPER_DEVICE=mps but MPS is not available. Falling back to CPU.")
+            return "cpu", "cpu", torch.float32
+
+        # Auto mode: prefer native accelerator backends first.
+        if cuda_available:
+            device_name = torch.cuda.get_device_name(0)
+            logger.info("Whisper device selected: cuda:0 (%s)", device_name)
+            return "cuda:0", f"cuda:0 ({device_name})", torch.float16
+
+        if xpu_available:
+            logger.info("Whisper device selected: xpu:0")
+            return "xpu:0", "xpu:0", torch.float16
+
+        if mps_available:
+            logger.info("Whisper device selected: mps")
+            return "mps", "mps", torch.float32
+
+        # Windows fallback for AMD/Intel/NVIDIA via DirectML.
+        dml_device = self._try_directml_device()
+        if dml_device is not None:
+            logger.info("Whisper device selected: directml")
+            return dml_device, "directml", torch.float32
+
+        logger.info("Whisper device selected: cpu (no accelerator backend available)")
+        return "cpu", "cpu", torch.float32
+
+    def _try_directml_device(self):
+        try:
+            torch_directml = importlib.import_module("torch_directml")
+            return torch_directml.device()
+        except Exception:
+            return None
 
     @property
     def model_type(self) -> str:
@@ -312,7 +402,10 @@ class WhisperModel(BaseModel):
 
         self.processor = AutoProcessor.from_pretrained(self.model_path)
 
-        print(f"[INFO] Loaded Whisper model: {self.model_path}")
+        print(
+            f"[INFO] Loaded Whisper model: {self.model_path} | "
+            f"device={self.device_label} | dtype={self.torch_dtype}"
+        )
 
     # ================= PUBLIC =================
     def transcribe(self, audio_file: str) -> Dict[str, Any]:

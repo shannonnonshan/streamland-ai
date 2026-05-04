@@ -80,7 +80,55 @@ Set these in `.env`:
 - `HF_TOKEN` - Hugging Face token
 - `HF_USERNAME` - Your username
 - `WHISPER_MODEL_PATH` - Model path on HF Hub
+- `WHISPER_DEVICE` - `auto` (default), `cuda`, `xpu`, `mps`, `directml`, or `cpu`
+- `SUMMARIZATION_DEVICE` - `auto` (default), `cuda`, `xpu`, `mps`, `directml`, or `cpu`
 - `API_PORT` - Server port (default: 8000)
+
+## Run With GPU (Local)
+
+Use this order when setting up GPU on Windows:
+
+1. Check NVIDIA GPU + driver in terminal:
+
+```powershell
+nvidia-smi
+```
+
+2. Check whether your current PyTorch can see CUDA:
+
+```powershell
+python -c "import torch; print(torch.__version__); print(torch.cuda.is_available()); print(torch.cuda.device_count())"
+```
+
+3. If output shows a CPU build (for example `+cpu`) or `False`:
+
+- For NVIDIA CUDA (recommended when available):
+
+```powershell
+pip uninstall -y torch torchvision torchaudio
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+```
+
+- For AMD/Intel/NVIDIA via DirectML backend on Windows:
+
+```powershell
+pip install torch-directml
+```
+
+4. Force app behavior via `.env`:
+
+```env
+WHISPER_DEVICE=auto
+SUMMARIZATION_DEVICE=auto
+```
+
+Behavior:
+- `*_DEVICE=auto`: use accelerator automatically in this order: `cuda` -> `xpu` -> `mps` -> `directml` -> `cpu`.
+- `*_DEVICE=cuda`: force CUDA, fallback CPU if not found.
+- `*_DEVICE=xpu`: force Intel XPU, fallback CPU if not found.
+- `*_DEVICE=mps`: force Apple MPS, fallback CPU if not found.
+- `*_DEVICE=directml`: force DirectML backend, fallback CPU if `torch-directml` is not installed.
+- `*_DEVICE=cpu`: always run on CPU.
 
 ## Features
 
