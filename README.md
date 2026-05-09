@@ -5,7 +5,7 @@ Fine-tuned Whisper model for multilingual speech recognition.
 ## Quick Start
 
 ```bash
-# Install dependencies
+## Install dependencies
 pip install -r requirements.txt
 
 # Configure .env
@@ -138,3 +138,76 @@ Behavior:
 - Universal model pusher for HF Hub
 - FastAPI REST server
 - Support for MP3, WAV, FLAC formats
+
+# Replicate API Guide - Streamland Whisper
+
+## Model Information
+- **Model**: shannonnonshan/streamland-whisper
+- **URL**: https://replicate.com/shannonnonshan/streamland-whisper
+- **API Token**: REPLICATE_API_TOKEN_REDACTED
+
+## Run With Cog (Hugging Face model)
+
+This repo's `predict.py` loads the model directly from the Hugging Face Hub: `shannonnonshan/streamland-whisper`.
+
+If the Hugging Face repo is private or gated, export `HF_TOKEN` before building so Cog can download it during `cog push`.
+
+1. Install `cog` if you don't have it:
+
+```bash
+pip install cog
+```
+
+2. Build the Cog runtime (first time):
+
+```bash
+cog build
+```
+
+3. Run a prediction with an audio file (example):
+
+```bash
+cog predict -i audio=/path/to/audio.wav -i language=en
+```
+
+From WSL, the push flow is:
+
+```bash
+export REPLICATE_API_TOKEN="your_replicate_token"
+export HF_TOKEN="your_hf_token_if_needed"
+cog push r8.im/shannonnonshan/streamland-whisper
+```
+
+Notes:
+- `predict.py` already points to the HF model ID `shannonnonshan/streamland-whisper`, so no extra model changes are required.
+- Cog uses a container runtime (Docker/Podman) to build and run environments. If you need a purely local, non-container workflow, run `python run.py` instead.
+## Quick Start
+
+### Python
+```python
+import replicate
+
+output = replicate.run(
+    "shannonnonshan/streamland-whisper:latest",
+    input={
+        "audio": "https://example.com/audio.wav",
+        "language": "en",
+        "task": "transcribe"
+    }
+)
+print(output)
+```
+
+## Input Parameters
+- `audio`: URL or path to audio file (required)
+- `language`: Language code (optional, e.g., 'en', 'vi', 'fr')
+- `task`: 'transcribe' or 'translate' (default: 'transcribe')
+
+## Output
+- `text`: Transcribed/translated text
+- `language`: Detected language
+- `segments`: Array of segments with timestamps
+
+## References
+- Replicate Docs: https://replicate.com/docs
+- Model Page: https://replicate.com/shannonnonshan/streamland-whisper

@@ -18,6 +18,12 @@ from utils.config import ModelConfig
 from api.endpoints import transcribe, search, chat, recommend, moderation, summarize
 from api import model_registry
 
+# GPU probe (import lazily to avoid hard dependency failures)
+try:
+    import torch
+except Exception:
+    torch = None
+
 load_dotenv()
 
 logging.basicConfig(
@@ -131,10 +137,32 @@ app.include_router(summarize.router)
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
+    gpu_info = {
+        "torch_present": bool(torch),
+        "cuda_available": False,
+        "device_count": 0,
+        "devices": []
+    }
+
+    if torch:
+        try:
+            gpu_info["cuda_available"] = torch.cuda.is_available()
+            gpu_info["device_count"] = torch.cuda.device_count()
+            devs = []
+            for i in range(gpu_info["device_count"]):
+                try:
+                    devs.append(torch.cuda.get_device_name(i))
+                except Exception:
+                    devs.append(f"cuda:{i}")
+            gpu_info["devices"] = devs
+        except Exception:
+            pass
+
     return {
         "status": "ok",
         "models_loaded": list(model_registry.models.keys()),
         "total_models": len(model_registry.models),
+        "gpu": gpu_info,
         "version": "1.0.0"
     }
 

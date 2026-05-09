@@ -11,6 +11,10 @@ from typing import Dict, Tuple
 
 from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import StreamingResponse
+from fastapi import HTTPException
+
+from utils.config import ModelConfig
+from utils.replicate_client import run_model_async
 
 from api.dependencies import get_whisper_model
 
@@ -160,3 +164,63 @@ async def transcribe(file: UploadFile = File(...), model=Depends(get_whisper_mod
             pass
 
     return StreamingResponse(generate(), media_type="application/x-ndjson")
+
+
+@router.post("/replicate")
+async def transcribe_replicate(file: UploadFile = File(...), language: str = ""):
+    """Transcribe using the Replicate-hosted `shannonnonshan/streamland-whisper` model.
+
+    This endpoint uploads the received file temporarily and forwards it to
+    Replicate via the SDK. It returns the raw JSON result from Replicate.
+    """
+    # Quick guard: ensure replicate usage enabled in config
+    if not ModelConfig.REPLICATE_USE:
+        raise HTTPException(status_code=400, detail="Replicate forwarding is disabled (REPLICATE_USE=false)")
+
+    # Check API token
+    if not ModelConfig.REPLICATE_API_TOKEN:
+        logger.error("REPLICATE_API_TOKEN is not set")
+        raise HTTPException(status_code=500, detail="REPLICATE_API_TOKEN not configured on server")
+
+    # Read file bytes
+    try:
+        contents = await file.read()
+    except Exception as e:
+        logger.error(f"Failed to read uploaded file: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to read uploaded file: {e}")
+
+    # Save to temp file
+    import tempfile
+
+    suffix = None
+    if file.filename and "." in file.filename:
+        suffix = "." + file.filename.rsplit(".", 1)[1]
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix or ".wav")
+    try:
+        tmp.write(contents)
+        tmp.flush()
+        tmp.close()
+
+        model_id = ModelConfig.REPLICATE_MODEL
+        if ":" not in model_id:
+            model_id = model_id + ":latest"
+
+        input_payload = {"audio": tmp.name}
+        if language:
+            input_payload["language"] = language
+
+        logger.info(f"Calling Replicate model: {model_id} with audio: {tmp.name}")
+
+        # Call replicate in background thread
+        try:
+            result = await run_model_async(model_id, input_payload)
+            logger.info(f"Replicate call succeeded: {model_id}")
+        except RuntimeError as e:
+            logger.error(f"Replicate call failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+        return {"status": "success", "model": model_id, "result": result}
+    finally:
+        # Note: leave temp file for a short time; system temp cleaners will remove it.
+        pass
