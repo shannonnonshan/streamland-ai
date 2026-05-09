@@ -48,8 +48,11 @@ Base URL (local): `http://127.0.0.1:8000`
 - `GET /health` - Health check, xem API đang chạy và các model đã load.
 - `GET /models` - Liệt kê model available + model đã load.
 - `POST /transcribe` - Nhận file audio và trả transcript bằng Whisper.
+- `POST /transcribe/replicate` - Nhận file audio và trả transcript qua Replicate.
 
 `POST /transcribe` hiện trả thêm `timestamps` theo một format duy nhất: mỗi item có `start` và `text` (giây bắt đầu nói nội dung nào).
+
+Nếu bật `REPLICATE_USE=true`, endpoint `POST /transcribe` sẽ tự động proxy sang Replicate và không cần tải model Whisper về local.
 
 ### Available when model is loaded
 
@@ -83,6 +86,9 @@ Set these in `.env`:
 - `WHISPER_DEVICE` - `auto` (default), `cuda`, `xpu`, `mps`, `directml`, or `cpu`
 - `SUMMARIZATION_DEVICE` - `auto` (default), `cuda`, `xpu`, `mps`, `directml`, or `cpu`
 - `API_PORT` - Server port (default: 8000)
+- `REPLICATE_USE` - `true` để proxy sang Replicate (không load Whisper local)
+- `REPLICATE_MODEL` - Model ID trên Replicate (mặc định: `shannonnonshan/streamland-whisper`)
+- `REPLICATE_API_TOKEN` - Token của Replicate
 
 ## Run With GPU (Local)
 

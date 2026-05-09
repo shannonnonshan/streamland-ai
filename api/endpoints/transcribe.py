@@ -9,7 +9,7 @@ import tempfile
 import time
 from typing import Dict, Tuple
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, File, UploadFile, Form
 from fastapi.responses import StreamingResponse
 from fastapi import HTTPException
 
@@ -75,9 +75,34 @@ async def _get_or_create_temp_file(file_content: bytes, original_filename: str) 
         return file_path
 
 
+async def _run_replicate_transcribe(temp_path: str, language: str) -> dict:
+    if not ModelConfig.REPLICATE_API_TOKEN:
+        logger.error("REPLICATE_API_TOKEN is not set")
+        raise HTTPException(status_code=500, detail="REPLICATE_API_TOKEN not configured on server")
+
+    model_id = ModelConfig.REPLICATE_MODEL
+    if ":" not in model_id:
+        model_id = model_id + ":latest"
+
+    input_payload = {"audio": temp_path}
+    if language:
+        input_payload["language"] = language
+
+    logger.info("Calling Replicate model: %s with audio: %s", model_id, temp_path)
+
+    try:
+        result = await run_model_async(model_id, input_payload)
+        logger.info("Replicate call succeeded: %s", model_id)
+    except RuntimeError as e:
+        logger.error("Replicate call failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {"status": "success", "model": model_id, "result": result}
+
+
 @router.post("")
-async def transcribe(file: UploadFile = File(...), model=Depends(get_whisper_model)):
-    """Transcribe audio file using Whisper model."""
+async def transcribe(file: UploadFile = File(...), language: str = Form("")):
+    """Transcribe audio file using Whisper model (local or Replicate)."""
     temp_path = None
 
     async def generate():
@@ -112,7 +137,12 @@ async def transcribe(file: UploadFile = File(...), model=Depends(get_whisper_mod
             logger.info("Using temp file: %s, starting transcription...", temp_path)
 
             started_at = time.monotonic()
-            transcribe_task = asyncio.create_task(asyncio.to_thread(model.transcribe, temp_path))
+
+            if ModelConfig.REPLICATE_USE:
+                transcribe_task = asyncio.create_task(_run_replicate_transcribe(temp_path, language))
+            else:
+                model = get_whisper_model()
+                transcribe_task = asyncio.create_task(asyncio.to_thread(model.transcribe, temp_path))
 
             # Keep streaming heartbeat messages while waiting for final result.
             while not transcribe_task.done():
@@ -167,7 +197,7 @@ async def transcribe(file: UploadFile = File(...), model=Depends(get_whisper_mod
 
 
 @router.post("/replicate")
-async def transcribe_replicate(file: UploadFile = File(...), language: str = ""):
+async def transcribe_replicate(file: UploadFile = File(...), language: str = Form("")):
     """Transcribe using the Replicate-hosted `shannonnonshan/streamland-whisper` model.
 
     This endpoint uploads the received file temporarily and forwards it to
@@ -177,50 +207,13 @@ async def transcribe_replicate(file: UploadFile = File(...), language: str = "")
     if not ModelConfig.REPLICATE_USE:
         raise HTTPException(status_code=400, detail="Replicate forwarding is disabled (REPLICATE_USE=false)")
 
-    # Check API token
-    if not ModelConfig.REPLICATE_API_TOKEN:
-        logger.error("REPLICATE_API_TOKEN is not set")
-        raise HTTPException(status_code=500, detail="REPLICATE_API_TOKEN not configured on server")
-
     # Read file bytes
     try:
         contents = await file.read()
     except Exception as e:
-        logger.error(f"Failed to read uploaded file: {e}")
+        logger.error("Failed to read uploaded file: %s", e)
         raise HTTPException(status_code=500, detail=f"Failed to read uploaded file: {e}")
 
-    # Save to temp file
-    import tempfile
-
-    suffix = None
-    if file.filename and "." in file.filename:
-        suffix = "." + file.filename.rsplit(".", 1)[1]
-
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix or ".wav")
-    try:
-        tmp.write(contents)
-        tmp.flush()
-        tmp.close()
-
-        model_id = ModelConfig.REPLICATE_MODEL
-        if ":" not in model_id:
-            model_id = model_id + ":latest"
-
-        input_payload = {"audio": tmp.name}
-        if language:
-            input_payload["language"] = language
-
-        logger.info(f"Calling Replicate model: {model_id} with audio: {tmp.name}")
-
-        # Call replicate in background thread
-        try:
-            result = await run_model_async(model_id, input_payload)
-            logger.info(f"Replicate call succeeded: {model_id}")
-        except RuntimeError as e:
-            logger.error(f"Replicate call failed: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
-
-        return {"status": "success", "model": model_id, "result": result}
-    finally:
-        # Note: leave temp file for a short time; system temp cleaners will remove it.
-        pass
+    # Save to temp file (reuse cache helper)
+    temp_path = await _get_or_create_temp_file(contents, file.filename)
+    return await _run_replicate_transcribe(temp_path, language)
