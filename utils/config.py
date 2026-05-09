@@ -28,10 +28,15 @@ class ModelConfig:
     MODERATION_USE_HF = os.getenv("MODERATION_USE_HF", "false").lower() == "true"
     
     # Summarization - Text Summary
-    SUMMARIZATION_MODEL = os.getenv("SUMMARIZATION_MODEL", "google/flan-t5-base")
+    SUMMARIZATION_MODEL = os.getenv("SUMMARIZATION_MODEL", "shannonnonshan/bart-summarizer")
     SUMMARIZATION_USE_HF = os.getenv("SUMMARIZATION_USE_HF", "true").lower() == "true"
     
     # Common settings
     HF_TOKEN = os.getenv("HF_TOKEN")
     API_HOST = os.getenv("API_HOST", "0.0.0.0")
     API_PORT = int(os.getenv("API_PORT", 8000))
+
+    # Replicate configuration (for backend-forwarding to Replicate-hosted model)
+    REPLICATE_USE = os.getenv("REPLICATE_USE", "false").lower() == "true"
+    REPLICATE_MODEL = os.getenv("REPLICATE_MODEL", "shannonnonshan/streamland-whisper")
+    REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
