@@ -50,8 +50,4 @@ jobs:
       # model name will be derived from the `image` value in cog.yaml.
       - name: Push to Replicate
         run: |
-          if [ -n "${{ inputs.model_name }}" ]; then
-            cog push r8.im/${{ inputs.model_name }}
-          else
-            cog push
-          fi
+          cog push r8.im/shannonnonshan/streamland-whisper
