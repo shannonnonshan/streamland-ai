@@ -1,8 +1,9 @@
-torch==2.1.2
-torchaudio==2.1.2
-transformers==4.35.2
+torch
+torchaudio
+transformers
 accelerate
 huggingface_hub
 librosa
 soundfile
 sentencepiece
+replicate
