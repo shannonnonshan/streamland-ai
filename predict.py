@@ -1,8 +1,8 @@
-import cog
+from cog import BasePredictor, Input, Path
 from faster_whisper import WhisperModel
 
 
-class Predictor(cog.Predictor):
+class Predictor(BasePredictor):
 
     def setup(self):
 
@@ -12,24 +12,16 @@ class Predictor(cog.Predictor):
             compute_type="float16"
         )
 
-        print("✓ Faster Whisper loaded")
+        print("✓ Model loaded")
 
-    @cog.input(
-        "audio",
-        type=cog.Path,
-        description="Audio file"
-    )
-    @cog.input(
-        "language",
-        type=str,
-        default="",
-        description="Language code like vi, en"
-    )
     def predict(
         self,
-        audio: cog.Path,
-        language: str = ""
-    ):
+        audio: Path = Input(description="Audio file"),
+        language: str = Input(
+            description="Language code",
+            default=""
+        )
+    ) -> dict:
 
         segments, info = self.model.transcribe(
             str(audio),
