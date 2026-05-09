@@ -18,8 +18,10 @@ jobs:
           sudo chmod +x /usr/local/bin/cog
 
       - name: Login to Replicate
+        env:
+          REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
         run: |
-          echo "${{ secrets.REPLICATE_API_TOKEN }}" | cog login --token-stdin
+          echo "$REPLICATE_API_TOKEN" | cog login --token-stdin
 
       - name: Push model
         run: |
