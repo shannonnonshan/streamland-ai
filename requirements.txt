@@ -7,3 +7,4 @@ librosa
 soundfile
 sentencepiece
 replicate
+faster-whisper

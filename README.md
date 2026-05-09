@@ -83,7 +83,8 @@ Set these in `.env`:
 - `HF_TOKEN` - Hugging Face token
 - `HF_USERNAME` - Your username
 - `WHISPER_MODEL_PATH` - Model path on HF Hub
-- `WHISPER_DEVICE` - `auto` (default), `cuda`, `xpu`, `mps`, `directml`, or `cpu`
+- `WHISPER_DEVICE` - `auto` (default), `cuda`, or `cpu` (other values fall back to auto for faster-whisper)
+- `WHISPER_COMPUTE_TYPE` - compute type for faster-whisper (e.g. `float16`, `int8`)
 - `SUMMARIZATION_DEVICE` - `auto` (default), `cuda`, `xpu`, `mps`, `directml`, or `cpu`
 - `API_PORT` - Server port (default: 8000)
 - `REPLICATE_USE` - `true` để proxy sang Replicate (không load Whisper local)
@@ -139,6 +140,7 @@ Behavior:
 ## Features
 
 - Fine-tuned Whisper model for English & Vietnamese
+- faster-whisper backend for local STT
 - Auto GPU/CPU detection
 - Modular design for multiple models
 - Universal model pusher for HF Hub

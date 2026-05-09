@@ -4,9 +4,10 @@ build:
 
   python_version: "3.10"
 
+  python_packages:
+    - "faster-whisper"
+
   system_packages:
     - "ffmpeg"
-
-  python_requirements: requirements.txt
 
 predict: "predict.py:Predictor"
