@@ -1,51 +1,32 @@
-"""Content moderation endpoint"""
+"""Content moderation endpoint."""
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
-from pydantic import BaseModel
-import os
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+
+from api.dependencies import get_moderation_model
 
 router = APIRouter(prefix="/moderation", tags=["moderation"])
 
 
 class TextModerationRequest(BaseModel):
-    text: str
+    text: str = Field(..., min_length=1)
+    rewrite: bool = True
 
 
 @router.post("/text")
-async def moderate_text(request: TextModerationRequest, model=None):
-    """Check if text content is safe."""
-    if not model or model.model_type != "moderation":
-        raise HTTPException(status_code=400, detail="Moderation model not available")
-    
+async def moderate_text(request: TextModerationRequest, model=Depends(get_moderation_model)):
+    """Run the staged moderation flow on text input."""
     try:
-        result = model.moderate_text(request.text)
         return {
             "status": "success",
             "text": request.text,
-            "moderation": result
+            "moderation": model.moderate_text(request.text, rewrite=request.rewrite),
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.post("/image")
-async def moderate_image(file: UploadFile = File(...), model=None):
-    """Check if image is NSFW safe."""
-    if not model or model.model_type != "moderation":
-        raise HTTPException(status_code=400, detail="Moderation model not available")
-    
-    try:
-        temp_path = f"temp_{file.filename}"
-        with open(temp_path, "wb") as f:
-            f.write(await file.read())
-        
-        result = model.moderate_image(temp_path)
-        os.remove(temp_path)
-        
-        return {
-            "status": "success",
-            "filename": file.filename,
-            "moderation": result
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+async def moderate_image():
+    """Image moderation is not part of the staged text flow."""
+    raise HTTPException(status_code=501, detail="Image moderation is not implemented in this flow")

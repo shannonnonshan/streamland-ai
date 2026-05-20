@@ -133,7 +133,7 @@ app.include_router(transcribe.router)
 # app.include_router(search.router)
 # app.include_router(chat.router)
 # app.include_router(recommend.router)
-# app.include_router(moderation.router)
+app.include_router(moderation.router)
 app.include_router(summarize.router)
 
 
@@ -179,7 +179,7 @@ async def list_models():
             # Future models to add later:
             # {"name": "embeddings", "type": "Embeddings", "purpose": "Search & Recommendations"},
             # {"name": "llama", "type": "LLM", "purpose": "Chat & RAG"},
-            # {"name": "moderation", "type": "Safety", "purpose": "Content Moderation"},
+            {"name": "moderation", "type": "Safety", "purpose": "Mixed EN/VI content moderation"},
             {"name": "summarization", "type": "NLG", "purpose": "Text Summarization"},
         ],
         "loaded": {key: model.info() for key, model in model_registry.models.items()}

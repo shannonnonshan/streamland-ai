@@ -1,221 +1,429 @@
-# StreamLand AI - Speech-to-Text Service
+# StreamLand AI - Multi-Model AI API
 
-Fine-tuned Whisper model for multilingual speech recognition.
+A comprehensive FastAPI-based service providing multiple AI models for speech recognition, text summarization, content moderation, and more. Designed for multilingual support (English & Vietnamese) with flexible deployment options.
 
-## Quick Start
+## 🎯 Overview
+
+StreamLand AI is a modular, production-ready API that orchestrates multiple state-of-the-art machine learning models:
+
+| Model | Purpose | Status |
+|-------|---------|--------|
+| **Whisper** | Speech-to-Text (STT) | ✅ Active |
+| **BART/ViT5** | Text Summarization | ✅ Active |
+| **Moderation** | Content Moderation + Detoxification | ✅ Active |
+| **Embeddings** | Semantic Search & Recommendations | ⏳ Planned |
+| **Llama** | Chat & RAG | ⏳ Planned |
+
+## 🚀 Quick Start
+
+### Installation
 
 ```bash
-## Install dependencies
+# Clone repository
+git clone <repo-url>
+cd streamland-ai
+
+# Install dependencies
 pip install -r requirements.txt
 
-# Configure .env
-HF_TOKEN=your_token
-HF_USERNAME=your_username
-WHISPER_MODEL_PATH=your_username/streamland-whisper
-WHISPER_USE_HF=true
+# Create environment file
+cp .env.example .env
+# Edit .env with your Hugging Face token and settings
+```
 
-# Test model
-python run.py
+### Running the API
 
-# Start API server
+```bash
+# Start FastAPI server
 python -m api.server
 ```
 
-## Project Structure
+API available at: `http://127.0.0.1:8000`
 
-```
-├── run.py                    # Test script
-├── api/server.py             # FastAPI server
-├── models/whisper/interface.py # Model wrapper
-├── utils/model_pusher.py     # Push to Hugging Face
-└── .env                      # Configuration
-```
-
-## Usage
-
-**Test:** `python run.py`
-
-**API Server:** `python -m api.server`
-
-**Push Model:** `python utils/model_pusher.py whisper`
-
-## API Endpoints (Working)
-
-Base URL (local): `http://127.0.0.1:8000`
-
-### Verified working now
-
-- `GET /health` - Health check, xem API đang chạy và các model đã load.
-- `GET /models` - Liệt kê model available + model đã load.
-- `POST /transcribe` - Nhận file audio và trả transcript bằng Whisper.
-- `POST /transcribe/replicate` - Nhận file audio và trả transcript qua Replicate.
-
-`POST /transcribe` hiện trả thêm `timestamps` theo một format duy nhất: mỗi item có `start` và `text` (giây bắt đầu nói nội dung nào).
-
-Nếu bật `REPLICATE_USE=true`, endpoint `POST /transcribe` sẽ tự động proxy sang Replicate và không cần tải model Whisper về local.
-
-### Available when model is loaded
-
-- `POST /summarize` - Tóm tắt văn bản (cần model `summarization` load thành công).
-
-### Quick test commands
+### Quick Tests
 
 ```bash
-# Health
-curl -X GET "http://127.0.0.1:8000/health"
+# Health check
+curl http://127.0.0.1:8000/health
 
-# Models
-curl -X GET "http://127.0.0.1:8000/models"
+# List models
+curl http://127.0.0.1:8000/models
 
-# Transcribe
+# Test Whisper locally
+python run.py
+```
+
+## 📁 Project Structure
+
+```
+streamland-ai/
+├── api/
+│   ├── server.py                  # FastAPI app & model initialization
+│   ├── model_registry.py          # Global model registry
+│   ├── dependencies.py            # Dependency injection for models
+│   └── endpoints/
+│       ├── transcribe.py          # Speech-to-text endpoint
+│       ├── summarize.py           # Text summarization endpoint
+│       ├── moderation.py          # Content moderation endpoint
+│       ├── chat.py                # LLM chat (future)
+│       ├── search.py              # Semantic search (future)
+│       └── recommend.py           # Recommendations (future)
+│
+├── models/
+│   ├── base.py                    # Abstract model interface
+│   ├── __init__.py                # Lazy-loading model imports
+│   ├── whisper/
+│   │   └── interface.py           # Whisper wrapper
+│   ├── summarization/
+│   │   └── interface.py           # Summarization wrapper
+│   ├── moderation/
+│   │   ├── interface.py           # Moderation engine
+│   │   └── __init__.py
+│   ├── embeddings/
+│   │   └── interface.py           # Embeddings (future)
+│   └── llama/
+│       └── interface.py           # LLM (future)
+│
+├── utils/
+│   ├── config.py                  # Centralized configuration
+│   ├── model_loader.py            # Dynamic model loading
+│   ├── model_pusher.py            # Push models to HF Hub
+│   ├── replicate_client.py        # Replicate API integration
+│   └── pipeline.py                # Model orchestration
+│
+├── requirements.txt               # Python dependencies
+├── .env                           # Configuration (gitignored)
+├── .env.example                   # Environment template
+├── cog.yaml                       # Replicate Cog config
+├── predict.py                     # Replicate prediction handler
+├── run.py                         # Local test script
+└── README.md                      # This file
+```
+
+## 🔌 API Endpoints
+
+### Health & Status
+
+```bash
+GET /health
+```
+Returns server status, GPU info, and loaded models.
+
+```bash
+GET /models
+```
+Lists available and currently loaded models with metadata.
+
+---
+
+### 🎤 Speech-to-Text (Whisper)
+
+```bash
+POST /transcribe
+```
+**Input:** Audio file (MP3, WAV, FLAC)  
+**Query params:** `language` (optional)
+
+**Response:**
+```json
+{
+  "status": "success",
+  "data": {
+    "filename": "audio.mp3",
+    "result": {
+      "text": "Full transcript here",
+      "language": "en",
+      "timestamps": [
+        {"start": 0.0, "text": "Full transcript"},
+        {"start": 1.2, "text": "here"}
+      ]
+    }
+  }
+}
+```
+
+**Auto-proxy to Replicate:** When `REPLICATE_USE=true`, automatically uses Replicate instead of loading model locally.
+
+```bash
+POST /transcribe/replicate
+```
+Explicitly use Replicate-hosted model.
+
+---
+
+### 📝 Text Summarization
+
+```bash
+POST /summarize
+```
+
+**Request:**
+```json
+{
+  "text": "Long document text...",
+  "max_length": 100,
+  "min_length": 30
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "text": "Original text...",
+  "summary": "Summarized text..."
+}
+```
+
+Auto-detects language (EN/VI) and uses appropriate model.
+
+---
+
+### 🛡️ Content Moderation
+
+```bash
+POST /moderation/text
+```
+
+**Request:**
+```json
+{
+  "text": "Text to moderate",
+  "rewrite": true
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "text": "Text to moderate",
+  "moderation": {
+    "label": "REVIEW",
+    "score": 0.62,
+    "categories": ["insult"],
+    "matched_spans": [...],
+    "detoxified_text": "Message to moderate",
+    "original_score": 0.62,
+    "detox_score": 0.18,
+    "rewrite_successful": true
+  }
+}
+```
+
+**Decision Labels:**
+- `SAFE` (score < 0.55) - Content is acceptable
+- `REVIEW` (0.55 ≤ score < 0.85) - Content needs review; detoxification offered
+- `BLOCK` (score ≥ 0.85) - Content is harmful
+
+---
+
+## ⚙️ Configuration
+
+Create `.env` file in project root:
+
+```env
+# Hugging Face Hub
+HF_TOKEN=your_token_here
+HF_USERNAME=your_username
+
+# Whisper Configuration
+WHISPER_MODEL_PATH=shannonnonshan/streamland-whisper-ct2
+WHISPER_USE_HF=true
+WHISPER_DEVICE=auto
+WHISPER_COMPUTE_TYPE=float16
+
+# Summarization Configuration
+SUMMARIZATION_MODEL=shannonnonshan/bart-summarizer
+SUMMARIZATION_USE_HF=true
+SUMMARIZATION_DEVICE=auto
+
+# Content Moderation Configuration
+MODERATION_EN_MODEL=s-nlp/roberta_toxicity_classifier
+MODERATION_VI_MODEL=cardiffnlp/twitter-xlm-roberta-base-offensive
+MODERATION_FULL_MODEL=cardiffnlp/twitter-xlm-roberta-base-offensive
+MODERATION_REWRITE_MODEL=s-nlp/bart-base-detox
+MODERATION_EMBEDDING_MODEL=BAAI/bge-m3
+MODERATION_BLOCK_THRESHOLD=0.85
+MODERATION_REVIEW_THRESHOLD=0.55
+MODERATION_GREYZONE_LOWER=0.40
+MODERATION_GREYZONE_UPPER=0.70
+
+# Replicate Integration (Optional)
+REPLICATE_USE=false
+REPLICATE_MODEL=shannonnonshan/streamland-whisper-ct2
+
+# API Server
+API_HOST=0.0.0.0
+API_PORT=8000
+```
+
+---
+
+## 🎯 Usage Examples
+
+### Example 1: Transcribe Audio
+
+```bash
 curl -X POST "http://127.0.0.1:8000/transcribe" \
-	-F "file=@utils/data/audio/testaudio-vn.mp3"
+  -F "file=@path/to/audio.mp3" \
+  -F "language=en"
+```
 
-# Summarize
+### Example 2: Summarize Text
+
+```bash
 curl -X POST "http://127.0.0.1:8000/summarize" \
-	-H "Content-Type: application/json" \
-	-d "{\"text\":\"Your long text here\"}"
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Long document content here...",
+    "max_length": 150
+  }'
 ```
 
-## Configuration
+### Example 3: Moderate Content
 
-Set these in `.env`:
-- `HF_TOKEN` - Hugging Face token
-- `HF_USERNAME` - Your username
-- `WHISPER_MODEL_PATH` - Model path on HF Hub
-- `WHISPER_DEVICE` - `auto` (default), `cuda`, or `cpu` (other values fall back to auto for faster-whisper)
-- `WHISPER_COMPUTE_TYPE` - compute type for faster-whisper (e.g. `float16`, `int8`)
-- `SUMMARIZATION_DEVICE` - `auto` (default), `cuda`, `xpu`, `mps`, `directml`, or `cpu`
-- `API_PORT` - Server port (default: 8000)
-- `REPLICATE_USE` - `true` để proxy sang Replicate (không load Whisper local)
-- `REPLICATE_MODEL` - Model ID trên Replicate (mặc định: `shannonnonshan/streamland-whisper`)
-- `REPLICATE_API_TOKEN` - Token của Replicate
+```bash
+curl -X POST "http://127.0.0.1:8000/moderation/text" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Content to check",
+    "rewrite": true
+  }'
+```
 
-## Run With GPU (Local)
+---
 
-Use this order when setting up GPU on Windows:
+## 🛡️ Content Moderation Pipeline
 
-1. Check NVIDIA GPU + driver in terminal:
+The moderation system uses a 10-stage pipeline:
+
+1. **Normalization** - Unicode normalization, lowercase, collapse repeated chars
+2. **Lexicon Pre-check** - Fast keyword scan (early exit if clean)
+3. **Language Split** - Detect English/Vietnamese/mixed using lingua
+4. **Span Construction** - Generate spans for individual languages, boundaries, full text
+5. **Toxicity Scoring** - Run parallel scorers (EN model for English, VI model for Vietnamese)
+6. **Grey-zone RAG** - For ambiguous scores (0.40-0.70), retrieve similar examples and nudge
+7. **Score Fusion** - Combine scores: 50% max + 30% mean + 20% full-sentence
+8. **Decision Making** - SAFE/REVIEW/BLOCK based on thresholds
+9. **Rewrite** (optional) - Detoxify REVIEW-level content using detox models
+10. **Re-score** - Validate rewritten text
+
+---
+
+## 🖥️ GPU Setup (Windows)
+
+### NVIDIA CUDA Setup
 
 ```powershell
+# Check GPU availability
 nvidia-smi
-```
 
-2. Check whether your current PyTorch can see CUDA:
-
-```powershell
-python -c "import torch; print(torch.__version__); print(torch.cuda.is_available()); print(torch.cuda.device_count())"
-```
-
-3. If output shows a CPU build (for example `+cpu`) or `False`:
-
-- For NVIDIA CUDA (recommended when available):
-
-```powershell
+# Reinstall PyTorch with CUDA support
 pip uninstall -y torch torchvision torchaudio
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
 ```
 
-- For AMD/Intel/NVIDIA via DirectML backend on Windows:
+### Device Fallback Order
 
-```powershell
-pip install torch-directml
-```
+Set `*_DEVICE=auto` to use automatic device selection:
+1. **CUDA** (NVIDIA GPU) - fastest
+2. **XPU** (Intel GPU)
+3. **MPS** (Apple Silicon)
+4. **DirectML** (Windows GPU)
+5. **CPU** (fallback)
 
-4. Force app behavior via `.env`:
+---
 
-```env
-WHISPER_DEVICE=auto
-SUMMARIZATION_DEVICE=auto
-```
+## 🚢 Deployment
 
-Behavior:
-- `*_DEVICE=auto`: use accelerator automatically in this order: `cuda` -> `xpu` -> `mps` -> `directml` -> `cpu`.
-- `*_DEVICE=cuda`: force CUDA, fallback CPU if not found.
-- `*_DEVICE=xpu`: force Intel XPU, fallback CPU if not found.
-- `*_DEVICE=mps`: force Apple MPS, fallback CPU if not found.
-- `*_DEVICE=directml`: force DirectML backend, fallback CPU if `torch-directml` is not installed.
-- `*_DEVICE=cpu`: always run on CPU.
-
-## Features
-
-- Fine-tuned Whisper model for English & Vietnamese
-- faster-whisper backend for local STT
-- Auto GPU/CPU detection
-- Modular design for multiple models
-- Universal model pusher for HF Hub
-- FastAPI REST server
-- Support for MP3, WAV, FLAC formats
-
-# Replicate API Guide - Streamland Whisper
-
-## Model Information
-- **Model**: shannonnonshan/streamland-whisper
-- **URL**: https://replicate.com/shannonnonshan/streamland-whisper
-- **API Token**: REPLICATE_API_TOKEN_REDACTED
-
-## Run With Cog (Hugging Face model)
-
-This repo's `predict.py` loads the model directly from the Hugging Face Hub: `shannonnonshan/streamland-whisper`.
-
-If the Hugging Face repo is private or gated, export `HF_TOKEN` before building so Cog can download it during `cog push`.
-
-1. Install `cog` if you don't have it:
+### Local Development
 
 ```bash
-pip install cog
+python -m api.server
 ```
 
-2. Build the Cog runtime (first time):
+### Docker
 
 ```bash
-cog build
+docker build -t streamland-ai:latest .
+docker run -p 8000:8000 streamland-ai:latest
 ```
 
-3. Run a prediction with an audio file (example):
+### Replicate
 
 ```bash
-cog predict -i audio=/path/to/audio.wav -i language=en
+cog push r8.im/shannonnonshan/streamland-whisper-ct2
 ```
 
-From WSL, the push flow is:
+---
+
+## 👨‍💻 Development
+
+### Adding a New Model
+
+1. Create interface in `models/<model_name>/interface.py`
+2. Register in `utils/model_loader.py`
+3. Add configuration in `utils/config.py`
+4. Create endpoint in `api/endpoints/<model_name>.py`
+5. Include router in `api/server.py`
+
+### Testing
 
 ```bash
-export REPLICATE_API_TOKEN="your_replicate_token"
-export HF_TOKEN="your_hf_token_if_needed"
-cog push r8.im/shannonnonshan/streamland-whisper
+python run.py              # Test Whisper locally
+curl http://127.0.0.1:8000/health  # Health check
 ```
 
-Notes:
-- `predict.py` already points to the HF model ID `shannonnonshan/streamland-whisper`, so no extra model changes are required.
-- Cog uses a container runtime (Docker/Podman) to build and run environments. If you need a purely local, non-container workflow, run `python run.py` instead.
-## Quick Start
+---
 
-### Python
-```python
-import replicate
+## 🐛 Troubleshooting
 
-output = replicate.run(
-    "shannonnonshan/streamland-whisper:latest",
-    input={
-        "audio": "https://example.com/audio.wav",
-        "language": "en",
-        "task": "transcribe"
-    }
-)
-print(output)
+### Import Errors
+
+```bash
+pip install -r requirements.txt
+pip install lingua-language-detector sentence-transformers
 ```
 
-## Input Parameters
-- `audio`: URL or path to audio file (required)
-- `language`: Language code (optional, e.g., 'en', 'vi', 'fr')
-- `task`: 'transcribe' or 'translate' (default: 'transcribe')
+### CUDA Not Found
 
-## Output
-- `text`: Transcribed/translated text
-- `language`: Detected language
-- `segments`: Array of segments with timestamps
+```bash
+nvidia-smi
+python -c "import torch; print(torch.cuda.is_available())"
+echo "WHISPER_DEVICE=cpu" >> .env
+```
 
-## References
-- Replicate Docs: https://replicate.com/docs
-- Model Page: https://replicate.com/shannonnonshan/streamland-whisper
+### Model Download Failures
+
+- Ensure `HF_TOKEN` is set for private models
+- Check internet connection
+- Verify token permissions
+
+---
+
+## 📚 References
+
+- [Whisper GitHub](https://github.com/openai/whisper)
+- [FastAPI Documentation](https://fastapi.tiangolo.com/)
+- [Hugging Face Hub](https://huggingface.co/)
+- [Replicate Documentation](https://replicate.com/docs)
+
+---
+
+## 📝 License
+
+Part of StreamLand AI initiative.
+
+## 🤝 Contributing
+
+1. Create feature branch
+2. Make changes and test locally
+3. Push and create pull request
+4. Ensure all tests pass
+
+---
+
+## 📞 Support
+
+For issues or questions, please open an issue on GitHub.

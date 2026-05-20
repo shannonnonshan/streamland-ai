@@ -25,4 +25,4 @@ jobs:
 
       - name: Push model
         run: |
-          cog push r8.im/shannonnonshan/streamland-whisper
+          cog push r8.im/shannonnonshan/streamland-whisper-ct2

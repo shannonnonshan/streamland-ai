@@ -10,7 +10,7 @@ class ModelConfig:
     """Centralized configuration for model loading."""
     
     # Whisper - STT
-    WHISPER_MODEL = os.getenv("WHISPER_MODEL_PATH", "openai/whisper-small")
+    WHISPER_MODEL = os.getenv("WHISPER_MODEL_PATH", "shannonnonshan/streamland-whisper-ct2")
     WHISPER_USE_HF = os.getenv("WHISPER_USE_HF", "true").lower() == "true"
     
     # Embeddings - Search & Recommend
@@ -26,6 +26,17 @@ class ModelConfig:
     # Moderation - Content Safety
     MODERATION_MODEL = os.getenv("MODERATION_MODEL", "detoxify")
     MODERATION_USE_HF = os.getenv("MODERATION_USE_HF", "false").lower() == "true"
+    MODERATION_EN_MODEL = os.getenv("MODERATION_EN_MODEL", "s-nlp/roberta_toxicity_classifier")
+    MODERATION_VI_MODEL = os.getenv("MODERATION_VI_MODEL", "cardiffnlp/twitter-xlm-roberta-base-offensive")
+    MODERATION_FULL_MODEL = os.getenv("MODERATION_FULL_MODEL", MODERATION_VI_MODEL)
+    MODERATION_REWRITE_MODEL = os.getenv("MODERATION_REWRITE_MODEL", "s-nlp/bart-base-detox")
+    MODERATION_EMBEDDING_MODEL = os.getenv("MODERATION_EMBEDDING_MODEL", "BAAI/bge-m3")
+    MODERATION_GREYZONE_LOWER = float(os.getenv("MODERATION_GREYZONE_LOWER", "0.40"))
+    MODERATION_GREYZONE_UPPER = float(os.getenv("MODERATION_GREYZONE_UPPER", "0.70"))
+    MODERATION_BLOCK_THRESHOLD = float(os.getenv("MODERATION_BLOCK_THRESHOLD", "0.85"))
+    MODERATION_REVIEW_THRESHOLD = float(os.getenv("MODERATION_REVIEW_THRESHOLD", "0.55"))
+    MODERATION_LEXICON_PATH = os.getenv("MODERATION_LEXICON_PATH")
+    MODERATION_EXAMPLES_PATH = os.getenv("MODERATION_EXAMPLES_PATH")
     
     # Summarization - Text Summary
     SUMMARIZATION_MODEL = os.getenv("SUMMARIZATION_MODEL", "shannonnonshan/bart-summarizer")
@@ -38,5 +49,5 @@ class ModelConfig:
 
     # Replicate configuration (for backend-forwarding to Replicate-hosted model)
     REPLICATE_USE = os.getenv("REPLICATE_USE", "false").lower() == "true"
-    REPLICATE_MODEL = os.getenv("REPLICATE_MODEL", "shannonnonshan/streamland-whisper")
+    REPLICATE_MODEL = os.getenv("REPLICATE_MODEL", "shannonnonshan/streamland-whisper-ct2")
     REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")

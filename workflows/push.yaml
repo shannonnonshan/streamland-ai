@@ -50,4 +50,4 @@ jobs:
       # model name will be derived from the `image` value in cog.yaml.
       - name: Push to Replicate
         run: |
-          cog push r8.im/shannonnonshan/streamland-whisper
+          cog push r8.im/shannonnonshan/streamland-whisper-ct2

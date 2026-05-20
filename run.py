@@ -129,7 +129,7 @@ if __name__ == "__main__":
 
         model_path = os.getenv(
             "WHISPER_MODEL_PATH",
-            "shannonnonshan/streamland-whisper"
+            "shannonnonshan/streamland-whisper-ct2"
         )
         use_hf = os.getenv("WHISPER_USE_HF", "true").lower() == "true"
 

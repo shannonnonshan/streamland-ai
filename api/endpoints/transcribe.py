@@ -198,7 +198,7 @@ async def transcribe(file: UploadFile = File(...), language: str = Form("")):
 
 @router.post("/replicate")
 async def transcribe_replicate(file: UploadFile = File(...), language: str = Form("")):
-    """Transcribe using the Replicate-hosted `shannonnonshan/streamland-whisper` model.
+    """Transcribe using the Replicate-hosted `shannonnonshan/streamland-whisper-ct2` model.
 
     This endpoint uploads the received file temporarily and forwards it to
     Replicate via the SDK. It returns the raw JSON result from Replicate.
