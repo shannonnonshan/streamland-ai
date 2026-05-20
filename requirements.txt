@@ -8,3 +8,12 @@ soundfile
 sentencepiece
 replicate
 faster-whisper
+fastapi
+uvicorn
+pydantic
+python-dotenv
+python-multipart
+numpy
+faiss-cpu
+langdetect
+cog

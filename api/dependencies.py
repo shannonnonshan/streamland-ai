@@ -22,3 +22,7 @@ def get_whisper_model():
 
 def get_summarization_model():
     return _require_model("summarization", "summarization")
+
+
+def get_embeddings_model():
+    return _require_model("embeddings", "embeddings")
