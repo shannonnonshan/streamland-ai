@@ -71,17 +71,13 @@ def init_models():
     try:
         model_registry.models.clear()
 
-        # Load Whisper (STT) unless Replicate proxying is enabled
-        if ModelConfig.REPLICATE_USE:
-            print("[INIT] Replicate proxy enabled. Skipping local Whisper load.")
-        else:
-            print("[INIT] Loading Whisper model...")
-            model_registry.models["whisper"] = ModelLoader.load_model(
-                "whisper",
-                model_path=ModelConfig.WHISPER_MODEL,
-                from_hf=ModelConfig.WHISPER_USE_HF
-            )
-            print("✓ Whisper loaded")
+        print("[INIT] Loading Whisper model...")
+        model_registry.models["whisper"] = ModelLoader.load_model(
+            "whisper",
+            model_path=ModelConfig.WHISPER_MODEL,
+            from_hf=ModelConfig.WHISPER_USE_HF
+        )
+        print("✓ Whisper loaded")
 
         # Future models to enable later:
         # print("[INIT] Loading Embeddings model...")

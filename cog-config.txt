@@ -1,2 +1,0 @@
-[defaults]
-replicate_username = YOUR_REPLICATE_USERNAME

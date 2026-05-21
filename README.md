@@ -88,14 +88,11 @@ streamland-ai/
 │   ├── config.py                  # Centralized configuration
 │   ├── model_loader.py            # Dynamic model loading
 │   ├── model_pusher.py            # Push models to HF Hub
-│   ├── replicate_client.py        # Replicate API integration
 │   └── pipeline.py                # Model orchestration
 │
 ├── requirements.txt               # Python dependencies
 ├── .env                           # Configuration (gitignored)
 ├── .env.example                   # Environment template
-├── cog.yaml                       # Replicate Cog config
-├── predict.py                     # Replicate prediction handler
 ├── run.py                         # Local test script
 └── README.md                      # This file
 ```
@@ -142,12 +139,7 @@ POST /transcribe
 }
 ```
 
-**Auto-proxy to Replicate:** When `REPLICATE_USE=true`, automatically uses Replicate instead of loading model locally.
-
-```bash
-POST /transcribe/replicate
-```
-Explicitly use Replicate-hosted model.
+Transcription runs locally on the machine's GPU when CUDA is available, so on Google Cloud you can point this service at a GPU VM or GPU-enabled container runtime and keep inference entirely inside your own cloud account.
 
 ---
 
@@ -188,8 +180,7 @@ POST /moderation/text
 **Request:**
 ```json
 {
-  "text": "Text to moderate",
-  "rewrite": true
+  "text": "Text to moderate"
 }
 ```
 
@@ -199,14 +190,11 @@ POST /moderation/text
   "status": "success",
   "text": "Text to moderate",
   "moderation": {
+    "status": "REVIEW",
+    "toxic_word": ["stupid"],
     "label": "REVIEW",
     "score": 0.62,
-    "categories": ["insult"],
-    "matched_spans": [...],
-    "detoxified_text": "Message to moderate",
-    "original_score": 0.62,
-    "detox_score": 0.18,
-    "rewrite_successful": true
+    "categories": ["insult"]
   }
 }
 ```
@@ -249,10 +237,6 @@ MODERATION_REVIEW_THRESHOLD=0.55
 MODERATION_GREYZONE_LOWER=0.40
 MODERATION_GREYZONE_UPPER=0.70
 
-# Replicate Integration (Optional)
-REPLICATE_USE=false
-REPLICATE_MODEL=shannonnonshan/streamland-whisper-ct2
-
 # API Server
 API_HOST=0.0.0.0
 API_PORT=8000
@@ -287,8 +271,7 @@ curl -X POST "http://127.0.0.1:8000/summarize" \
 curl -X POST "http://127.0.0.1:8000/moderation/text" \
   -H "Content-Type: application/json" \
   -d '{
-    "text": "Content to check",
-    "rewrite": true
+    "text": "Content to check"
   }'
 ```
 
@@ -350,11 +333,52 @@ docker build -t streamland-ai:latest .
 docker run -p 8000:8000 streamland-ai:latest
 ```
 
-### Replicate
+### Google Cloud GPU
+
+Run the API on a GPU-backed Google Cloud VM or GKE node pool. The recommended path is a container image built from this repo, then run it with NVIDIA GPU support enabled.
+
+1. Create an Artifact Registry repository.
 
 ```bash
-cog push r8.im/shannonnonshan/streamland-whisper-ct2
+gcloud services enable compute.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com
+gcloud artifacts repositories create streamland-ai \
+  --repository-format=docker \
+  --location=asia-southeast1 \
+  --description="StreamLand AI images"
 ```
+
+2. Build and push the image.
+
+```bash
+gcloud builds submit --config cloudbuild.yaml .
+```
+
+3. Deploy on a GPU-backed Compute Engine VM.
+
+```bash
+gcloud compute instances create streamland-ai-gpu \
+  --zone=asia-southeast1-b \
+  --machine-type=n1-standard-8 \
+  --accelerator=type=nvidia-l4,count=1 \
+  --maintenance-policy=TERMINATE \
+  --restart-on-failure \
+  --boot-disk-size=100GB \
+  --image-family=ubuntu-2204-lts \
+  --image-project=ubuntu-os-cloud
+```
+
+After the VM is ready, install Docker, NVIDIA drivers, and the Google Cloud GPU container runtime, then run:
+
+```bash
+docker run --gpus all -p 8000:8000 \
+  -e WHISPER_DEVICE=cuda \
+  -e WHISPER_COMPUTE_TYPE=float16 \
+  -e SUMMARIZATION_DEVICE=cuda \
+  -e HF_TOKEN=$HF_TOKEN \
+  asia-southeast1-docker.pkg.dev/$PROJECT_ID/streamland-ai/streamland-ai:latest
+```
+
+If you prefer GKE, use the same image and request a GPU node pool with NVIDIA drivers enabled.
 
 ---
 
@@ -400,6 +424,13 @@ echo "WHISPER_DEVICE=cpu" >> .env
 - Check internet connection
 - Verify token permissions
 
+### Google Cloud GPU
+
+- Use a GPU image or install NVIDIA drivers/CUDA on the VM
+- Set `WHISPER_DEVICE=auto` or `WHISPER_DEVICE=cuda`
+- Set `SUMMARIZATION_DEVICE=auto` or `SUMMARIZATION_DEVICE=cuda`
+- Verify Docker has GPU access with `docker run --rm --gpus all nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04 nvidia-smi`
+
 ---
 
 ## 📚 References
@@ -407,7 +438,7 @@ echo "WHISPER_DEVICE=cpu" >> .env
 - [Whisper GitHub](https://github.com/openai/whisper)
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [Hugging Face Hub](https://huggingface.co/)
-- [Replicate Documentation](https://replicate.com/docs)
+- [Google Cloud Compute Engine GPU](https://cloud.google.com/compute/docs/gpus)
 
 ---
 

@@ -6,7 +6,6 @@ huggingface_hub
 librosa
 soundfile
 sentencepiece
-replicate
 faster-whisper
 lingua-language-detector
 sentence-transformers
