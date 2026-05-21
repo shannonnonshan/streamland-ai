@@ -27,6 +27,6 @@ RUN python3 -m pip install --index-url https://download.pytorch.org/whl/cu128 \
 
 COPY . .
 
-EXPOSE 8000
+EXPOSE 8080
 
 CMD ["python3", "-m", "api.server"]
