@@ -13,9 +13,6 @@ from fastapi import APIRouter, File, UploadFile, Form
 from fastapi.responses import StreamingResponse
 from fastapi import HTTPException
 
-from utils.config import ModelConfig
-from utils.replicate_client import run_model_async
-
 from api.dependencies import get_whisper_model
 
 router = APIRouter(prefix="/transcribe", tags=["transcribe"])
@@ -75,34 +72,9 @@ async def _get_or_create_temp_file(file_content: bytes, original_filename: str) 
         return file_path
 
 
-async def _run_replicate_transcribe(temp_path: str, language: str) -> dict:
-    if not ModelConfig.REPLICATE_API_TOKEN:
-        logger.error("REPLICATE_API_TOKEN is not set")
-        raise HTTPException(status_code=500, detail="REPLICATE_API_TOKEN not configured on server")
-
-    model_id = ModelConfig.REPLICATE_MODEL
-    if ":" not in model_id:
-        model_id = model_id + ":latest"
-
-    input_payload = {"audio": temp_path}
-    if language:
-        input_payload["language"] = language
-
-    logger.info("Calling Replicate model: %s with audio: %s", model_id, temp_path)
-
-    try:
-        result = await run_model_async(model_id, input_payload)
-        logger.info("Replicate call succeeded: %s", model_id)
-    except RuntimeError as e:
-        logger.error("Replicate call failed: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
-
-    return {"status": "success", "model": model_id, "result": result}
-
-
 @router.post("")
 async def transcribe(file: UploadFile = File(...), language: str = Form("")):
-    """Transcribe audio file using Whisper model (local or Replicate)."""
+    """Transcribe audio file using the local Whisper model."""
     temp_path = None
 
     async def generate():
@@ -138,11 +110,8 @@ async def transcribe(file: UploadFile = File(...), language: str = Form("")):
 
             started_at = time.monotonic()
 
-            if ModelConfig.REPLICATE_USE:
-                transcribe_task = asyncio.create_task(_run_replicate_transcribe(temp_path, language))
-            else:
-                model = get_whisper_model()
-                transcribe_task = asyncio.create_task(asyncio.to_thread(model.transcribe, temp_path))
+            model = get_whisper_model()
+            transcribe_task = asyncio.create_task(asyncio.to_thread(model.transcribe, temp_path))
 
             # Keep streaming heartbeat messages while waiting for final result.
             while not transcribe_task.done():
@@ -194,26 +163,3 @@ async def transcribe(file: UploadFile = File(...), language: str = Form("")):
             pass
 
     return StreamingResponse(generate(), media_type="application/x-ndjson")
-
-
-@router.post("/replicate")
-async def transcribe_replicate(file: UploadFile = File(...), language: str = Form("")):
-    """Transcribe using the Replicate-hosted `shannonnonshan/streamland-whisper` model.
-
-    This endpoint uploads the received file temporarily and forwards it to
-    Replicate via the SDK. It returns the raw JSON result from Replicate.
-    """
-    # Quick guard: ensure replicate usage enabled in config
-    if not ModelConfig.REPLICATE_USE:
-        raise HTTPException(status_code=400, detail="Replicate forwarding is disabled (REPLICATE_USE=false)")
-
-    # Read file bytes
-    try:
-        contents = await file.read()
-    except Exception as e:
-        logger.error("Failed to read uploaded file: %s", e)
-        raise HTTPException(status_code=500, detail=f"Failed to read uploaded file: {e}")
-
-    # Save to temp file (reuse cache helper)
-    temp_path = await _get_or_create_temp_file(contents, file.filename)
-    return await _run_replicate_transcribe(temp_path, language)

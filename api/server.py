@@ -71,17 +71,13 @@ def init_models():
     try:
         model_registry.models.clear()
 
-        # Load Whisper (STT) unless Replicate proxying is enabled
-        if ModelConfig.REPLICATE_USE:
-            print("[INIT] Replicate proxy enabled. Skipping local Whisper load.")
-        else:
-            print("[INIT] Loading Whisper model...")
-            model_registry.models["whisper"] = ModelLoader.load_model(
-                "whisper",
-                model_path=ModelConfig.WHISPER_MODEL,
-                from_hf=ModelConfig.WHISPER_USE_HF
-            )
-            print("✓ Whisper loaded")
+        print("[INIT] Loading Whisper model...")
+        model_registry.models["whisper"] = ModelLoader.load_model(
+            "whisper",
+            model_path=ModelConfig.WHISPER_MODEL,
+            from_hf=ModelConfig.WHISPER_USE_HF
+        )
+        print("✓ Whisper loaded")
 
         print("[INIT] Loading Embeddings model...")
         model_registry.models["embeddings"] = ModelLoader.load_model(
@@ -131,7 +127,8 @@ async def startup_event():
 app.include_router(transcribe.router)
 app.include_router(search.router)
 # app.include_router(chat.router)
-# app.include_router(moderation.router)
+# app.include_router(recommend.router)
+app.include_router(moderation.router)
 app.include_router(summarize.router)
 
 
@@ -176,7 +173,7 @@ async def list_models():
             {"name": "whisper", "type": "STT", "purpose": "Speech-to-Text"},
             {"name": "embeddings", "type": "Embeddings", "purpose": "Search & Recommendations"},
             # {"name": "llama", "type": "LLM", "purpose": "Chat & RAG"},
-            # {"name": "moderation", "type": "Safety", "purpose": "Content Moderation"},
+            {"name": "moderation", "type": "Safety", "purpose": "Mixed EN/VI content moderation"},
             {"name": "summarization", "type": "NLG", "purpose": "Text Summarization"},
         ],
         "loaded": {key: model.info() for key, model in model_registry.models.items()}

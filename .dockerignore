@@ -18,3 +18,10 @@ __pycache__
 
 # Exclude Python virtual environment
 /venv
+
+# Exclude local runtime state and environment files
+.env
+.env.*
+data/
+tmp/
+*.log
