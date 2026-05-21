@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from utils.model_loader import ModelLoader
 from utils.config import ModelConfig
-from api.endpoints import transcribe, search, chat, recommend, moderation, summarize
+from api.endpoints import transcribe, search, chat, moderation, summarize
 from api import model_registry
 
 # GPU probe (import lazily to avoid hard dependency failures)
@@ -79,14 +79,13 @@ def init_models():
         )
         print("✓ Whisper loaded")
 
-        # Future models to enable later:
-        # print("[INIT] Loading Embeddings model...")
-        # model_registry.models["embeddings"] = ModelLoader.load_model(
-        #     "embeddings",
-        #     model_path=ModelConfig.EMBEDDINGS_MODEL,
-        #     from_hf=ModelConfig.EMBEDDINGS_USE_HF
-        # )
-        # print("✓ Embeddings loaded")
+        print("[INIT] Loading Embeddings model...")
+        model_registry.models["embeddings"] = ModelLoader.load_model(
+            "embeddings",
+            model_path=ModelConfig.EMBEDDINGS_MODEL,
+            from_hf=ModelConfig.EMBEDDINGS_USE_HF
+        )
+        print("✓ Embeddings loaded")
 
         # print("[INIT] Loading LLama model...")
         # model_registry.models["llama"] = ModelLoader.load_model(
@@ -126,7 +125,7 @@ async def startup_event():
 
 # Register routers
 app.include_router(transcribe.router)
-# app.include_router(search.router)
+app.include_router(search.router)
 # app.include_router(chat.router)
 # app.include_router(recommend.router)
 app.include_router(moderation.router)
@@ -172,8 +171,7 @@ async def list_models():
     return {
         "available": [
             {"name": "whisper", "type": "STT", "purpose": "Speech-to-Text"},
-            # Future models to add later:
-            # {"name": "embeddings", "type": "Embeddings", "purpose": "Search & Recommendations"},
+            {"name": "embeddings", "type": "Embeddings", "purpose": "Search & Recommendations"},
             # {"name": "llama", "type": "LLM", "purpose": "Chat & RAG"},
             {"name": "moderation", "type": "Safety", "purpose": "Mixed EN/VI content moderation"},
             {"name": "summarization", "type": "NLG", "purpose": "Text Summarization"},

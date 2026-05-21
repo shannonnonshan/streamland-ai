@@ -7,5 +7,12 @@ librosa
 soundfile
 sentencepiece
 faster-whisper
-lingua-language-detector
-sentence-transformers
+fastapi
+uvicorn
+pydantic
+python-dotenv
+python-multipart
+numpy
+faiss-cpu
+langdetect
+cog
