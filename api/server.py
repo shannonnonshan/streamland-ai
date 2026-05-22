@@ -117,15 +117,17 @@ def init_models():
         print(f"✗ Failed to load models: {e}")
 
 
-@app.on_event("startup")
-async def startup_event():
-    import asyncio
+# @app.on_event("startup")
+# async def startup_event():
+#     import asyncio
 
-    asyncio.create_task(load_models_background())
+#     asyncio.create_task(load_models_background())
 
 async def load_models_background():
     init_models()
-    
+@app.get("/")
+async def root():
+    return {"ok": True, "message": "StreamLand AI API is running. Check /health for status."}     
 # Register routers
 app.include_router(transcribe.router)
 app.include_router(search.router)
