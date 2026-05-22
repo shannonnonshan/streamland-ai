@@ -32,9 +32,13 @@ RUN python3 -m pip install \
 COPY requirements.txt .
 
 RUN python3 -m pip install -r requirements.txt
-RUN python3 scripts/build_search_index.py
+
 # Copy source code
 COPY . .
+
+# Runtime entrypoint
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
 
 # HuggingFace cache directory
 RUN mkdir -p /models/huggingface
@@ -42,4 +46,4 @@ RUN mkdir -p /models/huggingface
 EXPOSE 8080
 
 # Start FastAPI
-CMD ["uvicorn", "api.server:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["/app/start.sh"]
