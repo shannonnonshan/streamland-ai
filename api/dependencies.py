@@ -26,3 +26,7 @@ def get_summarization_model():
 
 def get_embeddings_model():
     return _require_model("embeddings", "embeddings")
+
+
+def get_chatbot_model():
+    return _require_model("chatbot", "chatbot")

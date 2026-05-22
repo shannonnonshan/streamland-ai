@@ -75,6 +75,11 @@ curl -X POST "http://127.0.0.1:8000/transcribe" \
 curl -X POST "http://127.0.0.1:8000/summarize" \
 	-H "Content-Type: application/json" \
 	-d "{\"text\":\"Your long text here\"}"
+
+# Chatbot
+curl -X POST "http://127.0.0.1:8000/chat" \
+    -H "Content-Type: application/json" \
+    -d "{\"message\":\"What is past perfect?\",\"history\":[{\"role\":\"user\",\"msg\":\"Hello\"}],\"exclude_ids\":[],\"top_k\":5}"
 ```
 
 ## Configuration

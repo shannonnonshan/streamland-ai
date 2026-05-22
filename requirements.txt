@@ -3,6 +3,7 @@ torchaudio
 transformers
 accelerate
 huggingface_hub
+unsloth
 librosa
 soundfile
 sentencepiece

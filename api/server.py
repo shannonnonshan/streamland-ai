@@ -91,13 +91,13 @@ def init_models():
         )
         print("✓ Embeddings loaded")
 
-        # print("[INIT] Loading LLama model...")
-        # model_registry.models["llama"] = ModelLoader.load_model(
-        #     "llama",
-        #     model_path=ModelConfig.LLAMA_MODEL,
-        #     from_hf=ModelConfig.LLAMA_USE_HF
-        # )
-        # print("✓ LLama loaded")
+        print("[INIT] Loading Chatbot model...")
+        model_registry.models["chatbot"] = ModelLoader.load_model(
+            "chatbot",
+            model_path=ModelConfig.CHATBOT_MODEL,
+            from_hf=ModelConfig.CHATBOT_USE_HF
+        )
+        print("✓ Chatbot loaded")
 
         # print("[INIT] Loading Moderation model...")
         # model_registry.models["moderation"] = ModelLoader.load_model(
@@ -130,7 +130,7 @@ async def startup_event():
 # Register routers
 app.include_router(transcribe.router)
 app.include_router(search.router)
-# app.include_router(chat.router)
+app.include_router(chat.router)
 # app.include_router(moderation.router)
 app.include_router(summarize.router)
 
@@ -175,7 +175,7 @@ async def list_models():
         "available": [
             {"name": "whisper", "type": "STT", "purpose": "Speech-to-Text"},
             {"name": "embeddings", "type": "Embeddings", "purpose": "Search & Recommendations"},
-            # {"name": "llama", "type": "LLM", "purpose": "Chat & RAG"},
+            {"name": "chatbot", "type": "Chat", "purpose": "Conversational QA"},
             # {"name": "moderation", "type": "Safety", "purpose": "Content Moderation"},
             {"name": "summarization", "type": "NLG", "purpose": "Text Summarization"},
         ],

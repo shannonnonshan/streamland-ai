@@ -27,6 +27,14 @@ class ModelConfig:
     LLAMA_MODEL = os.getenv("LLAMA_MODEL", "meta-llama/Llama-2-7b-chat-hf")
     LLAMA_USE_HF = os.getenv("LLAMA_USE_HF", "true").lower() == "true"
     LLAMA_DEVICE = os.getenv("LLAMA_DEVICE", "cpu")  # cpu or cuda
+
+    # Chatbot - Conversational QA
+    CHATBOT_MODEL = os.getenv("CHATBOT_MODEL_PATH", "shannonnonshan/streamland-chatbot")
+    CHATBOT_USE_HF = os.getenv("CHATBOT_USE_HF", "true").lower() == "true"
+    CHATBOT_BASE_MODEL = os.getenv(
+        "CHATBOT_BASE_MODEL",
+        "unsloth/Qwen2.5-7B-Instruct-bnb-4bit",
+    )
     
     # Moderation - Content Safety
     MODERATION_MODEL = os.getenv("MODERATION_MODEL", "detoxify")
