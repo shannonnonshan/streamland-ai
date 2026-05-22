@@ -6,6 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
     HF_HOME=/models/huggingface \
     TRANSFORMERS_CACHE=/models/huggingface \
+    TRANSFORMERS_NO_TORCHAO=1 \
     PORT=8080
 
 WORKDIR /app
