@@ -38,3 +38,7 @@ def get_moderation_model():
 
 def get_chatbot_model():
     return _require_model("chatbot", "chatbot")
+
+
+def get_embeddings_model():
+    return _require_model("embeddings", "embeddings")

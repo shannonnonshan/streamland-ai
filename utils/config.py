@@ -20,6 +20,20 @@ class ModelConfig:
         "CHATBOT_BASE_MODEL",
         "unsloth/Qwen2.5-7B-Instruct-bnb-4bit",
     )
+    CHATBOT_USE_UNSLOTH = os.getenv("CHATBOT_USE_UNSLOTH", "true").lower() == "true"
+    CHATBOT_LOAD_IN_4BIT = os.getenv("CHATBOT_LOAD_IN_4BIT", "false").lower() == "true"
+    CHATBOT_MAX_SEQ_LENGTH = int(os.getenv("CHATBOT_MAX_SEQ_LENGTH", "2048"))
+    CHATBOT_MAX_NEW_TOKENS = int(os.getenv("CHATBOT_MAX_NEW_TOKENS", "500"))
+
+    # Embeddings - Search & Recommend
+    EMBEDDINGS_MODEL = os.getenv(
+        "SEARCH_MODEL_PATH",
+        os.getenv("EMBEDDINGS_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
+    )
+    EMBEDDINGS_USE_HF = os.getenv("EMBEDDINGS_USE_HF", "true").lower() == "true"
+    FAISS_INDEX_PATH = os.getenv("FAISS_INDEX_PATH", "embeddings.faiss")
+    FAISS_METADATA_PATH = os.getenv("FAISS_METADATA_PATH", "embeddings.meta.json")
+    SEARCH_CORPUS_PATH = os.getenv("SEARCH_CORPUS_PATH", "data/search_corpus.jsonl")
     
     # Moderation - Content Safety
     MODERATION_MODEL = os.getenv("MODERATION_MODEL", "detoxify")
@@ -44,4 +58,9 @@ class ModelConfig:
     HF_TOKEN = os.getenv("HF_TOKEN")
     API_HOST = os.getenv("API_HOST", "0.0.0.0")
     API_PORT = int(os.getenv("API_PORT", 8000))
+
+    # Replicate configuration
+    REPLICATE_USE = os.getenv("REPLICATE_USE", "false").lower() == "true"
+    REPLICATE_MODEL = os.getenv("REPLICATE_MODEL", "shannonnonshan/streamland-whisper")
+    REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
 

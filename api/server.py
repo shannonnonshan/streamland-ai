@@ -17,6 +17,12 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
+from api import model_registry
+from api.endpoints import transcribe, chat, summarize
+from api.endpoints import search as search_endpoint
+from utils.config import ModelConfig
+from utils.model_loader import ModelLoader
+
 # =========================
 # Load env
 # =========================
@@ -158,7 +164,7 @@ async def startup_event():
 
 # Register routers
 app.include_router(transcribe.router)
-app.include_router(search.router)
+app.include_router(search_endpoint.router)
 app.include_router(chat.router)
 # app.include_router(moderation.router)
 app.include_router(summarize.router)
