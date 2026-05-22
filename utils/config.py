@@ -12,6 +12,14 @@ class ModelConfig:
     # Whisper - STT
     WHISPER_MODEL = os.getenv("WHISPER_MODEL_PATH", "shannonnonshan/streamland-whisper-ct2")
     WHISPER_USE_HF = os.getenv("WHISPER_USE_HF", "true").lower() == "true"
+
+    # Chatbot - Conversational QA
+    CHATBOT_MODEL = os.getenv("CHATBOT_MODEL_PATH", "shannonnonshan/streamland-chatbot")
+    CHATBOT_USE_HF = os.getenv("CHATBOT_USE_HF", "true").lower() == "true"
+    CHATBOT_BASE_MODEL = os.getenv(
+        "CHATBOT_BASE_MODEL",
+        "unsloth/Qwen2.5-7B-Instruct-bnb-4bit",
+    )
     
     # Moderation - Content Safety
     MODERATION_MODEL = os.getenv("MODERATION_MODEL", "detoxify")

@@ -1,7 +1,12 @@
 transformers
 accelerate
 huggingface_hub
-
+unsloth
+librosa
+soundfile
+sentencepiece
+replicate
+faster-whisper
 fastapi
 uvicorn[standard]
 

@@ -34,3 +34,7 @@ def _get_moderation_singleton():
 
 def get_moderation_model():
     return _get_moderation_singleton()
+
+
+def get_chatbot_model():
+    return _require_model("chatbot", "chatbot")

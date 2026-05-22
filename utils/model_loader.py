@@ -15,6 +15,9 @@ class ModelLoader:
     # Available model types
     AVAILABLE_MODELS = {
         "whisper": "models.whisper.interface.WhisperModel",
+        "embeddings": "models.embeddings.interface.EmbeddingModel",
+        "llama": "models.llama.interface.LlamaModel",
+        "chatbot": "models.chatbot.interface.ChatbotModel",
         "moderation": "models.moderation.interface.ModerationModel",
         "summarization": "models.summarization.interface.SummarizationModel",
     }
@@ -87,6 +90,9 @@ class ModelLoader:
         """Return dict of available models and their descriptions."""
         return {
             "whisper": "Speech-to-Text (STT) - Detect giọng nói",
+            "embeddings": "Text Embeddings - Search & Recommendations",
+            "llama": "LLM - Chat QA & RAG",
+            "chatbot": "Chatbot - Conversational QA",
             "moderation": "Content Moderation - Text & Image Safety",
             "summarization": "Text Summarization - Tóm tắt nội dung",
         }

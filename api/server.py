@@ -95,21 +95,74 @@ async def log_requests(request: Request, call_next):
 
     return response
 
-# =========================
-# Root
-# =========================
+def init_models():
+    """Initialize all models on startup."""
+    try:
+        model_registry.models.clear()
 
-@app.get("/")
-async def root():
-    return {
-        "ok": True,
-        "service_mode": SERVICE_MODE,
-        "message": "StreamLand AI API is running"
-    }
+        # Load Whisper (STT) unless Replicate proxying is enabled
+        if ModelConfig.REPLICATE_USE:
+            print("[INIT] Replicate proxy enabled. Skipping local Whisper load.")
+        else:
+            print("[INIT] Loading Whisper model...")
+            model_registry.models["whisper"] = ModelLoader.load_model(
+                "whisper",
+                model_path=ModelConfig.WHISPER_MODEL,
+                from_hf=ModelConfig.WHISPER_USE_HF
+            )
+            print("✓ Whisper loaded")
 
-# =========================
-# Health
-# =========================
+        print("[INIT] Loading Embeddings model...")
+        model_registry.models["embeddings"] = ModelLoader.load_model(
+            "embeddings",
+            model_path=ModelConfig.EMBEDDINGS_MODEL,
+            from_hf=ModelConfig.EMBEDDINGS_USE_HF
+        )
+        print("✓ Embeddings loaded")
+
+        print("[INIT] Loading Chatbot model...")
+        model_registry.models["chatbot"] = ModelLoader.load_model(
+            "chatbot",
+            model_path=ModelConfig.CHATBOT_MODEL,
+            from_hf=ModelConfig.CHATBOT_USE_HF
+        )
+        print("✓ Chatbot loaded")
+
+        # print("[INIT] Loading Moderation model...")
+        # model_registry.models["moderation"] = ModelLoader.load_model(
+        #     "moderation",
+        #     model_path=ModelConfig.MODERATION_MODEL,
+        #     from_hf=ModelConfig.MODERATION_USE_HF
+        # )
+        # print("✓ Moderation loaded")
+        
+        # Load Summarization
+        print("[INIT] Loading Summarization model...")
+        model_registry.models["summarization"] = ModelLoader.load_model(
+            "summarization",
+            model_path=ModelConfig.SUMMARIZATION_MODEL,
+            from_hf=ModelConfig.SUMMARIZATION_USE_HF
+        )
+        print("✓ Summarization loaded")
+        
+        print("\n✓ All models loaded successfully!")
+    except Exception as e:
+        print(f"✗ Failed to load models: {e}")
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize models on server startup."""
+    init_models()
+
+
+# Register routers
+app.include_router(transcribe.router)
+app.include_router(search.router)
+app.include_router(chat.router)
+# app.include_router(moderation.router)
+app.include_router(summarize.router)
+
 
 @app.get("/health")
 async def health_check():
@@ -145,37 +198,21 @@ async def health_check():
         "version": "1.0.0"
     }
 
-# =========================
-# Dynamic router loading
-# =========================
 
-if SERVICE_MODE == "gpu":
+@app.get("/models")
+async def list_models():
+    """List loaded models with their info."""
+    return {
+        "available": [
+            {"name": "whisper", "type": "STT", "purpose": "Speech-to-Text"},
+            {"name": "embeddings", "type": "Embeddings", "purpose": "Search & Recommendations"},
+            {"name": "chatbot", "type": "Chat", "purpose": "Conversational QA"},
+            # {"name": "moderation", "type": "Safety", "purpose": "Content Moderation"},
+            {"name": "summarization", "type": "NLG", "purpose": "Text Summarization"},
+        ],
+        "loaded": {key: model.info() for key, model in model_registry.models.items()}
+    }
 
-    logger.info("Loading GPU Whisper routes...")
-
-    from api.endpoints import transcribe
-
-    app.include_router(transcribe.router)
-
-elif SERVICE_MODE == "cpu":
-
-    logger.info("Loading CPU text routes...")
-
-    from api.endpoints import moderation, summarize
-
-    app.include_router(moderation.router)
-    app.include_router(summarize.router)
-
-else:
-
-    logger.warning(
-        "Unknown SERVICE_MODE=%s. No routes loaded.",
-        SERVICE_MODE
-    )
-
-# =========================
-# Entrypoint
-# =========================
 
 if __name__ == "__main__":
 

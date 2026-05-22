@@ -249,11 +249,21 @@ curl -X POST "http://127.0.0.1:8000/transcribe" \
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/summarize" \
+<<<<<<< HEAD
   -H "Content-Type: application/json" \
   -d '{
     "text": "Long document content here...",
     "max_length": 150
   }'
+=======
+	-H "Content-Type: application/json" \
+	-d "{\"text\":\"Your long text here\"}"
+
+# Chatbot
+curl -X POST "http://127.0.0.1:8000/chat" \
+    -H "Content-Type: application/json" \
+    -d "{\"message\":\"What is past perfect?\",\"history\":[{\"role\":\"user\",\"msg\":\"Hello\"}],\"exclude_ids\":[],\"top_k\":5}"
+>>>>>>> origin/vythanh-4-ai
 ```
 
 ### Example 3: Moderate Content

@@ -5,13 +5,13 @@ loading unrelated components such as moderation.
 """
 
 from .base import BaseModel
+from .whisper import WhisperModel
+from .embeddings import EmbeddingModel
+from .chatbot import ChatbotModel
 
-__all__ = ["BaseModel", "WhisperModel"]
-
-
-def __getattr__(name):
-    if name == "WhisperModel":
-        from .whisper import WhisperModel
-
-        return WhisperModel
-    raise AttributeError(f"module 'models' has no attribute {name!r}")
+__all__ = [
+    "BaseModel",
+    "WhisperModel",
+    "EmbeddingModel",
+    "ChatbotModel",
+]
