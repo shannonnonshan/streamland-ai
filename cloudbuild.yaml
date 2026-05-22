@@ -1,9 +1,14 @@
+timeout: 3600s
+
 substitutions:
   _REGION: asia-southeast1
   _AR_REPOSITORY: streamland-ai
   _IMAGE_NAME: streamland-ai
 
 steps:
+  # =========================
+  # Build Docker image
+  # =========================
   - name: gcr.io/cloud-builders/docker
     args:
       - build
@@ -12,6 +17,96 @@ steps:
       - -t
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPOSITORY}/${_IMAGE_NAME}:latest
       - .
+
+  # =========================
+  # Deploy Whisper GPU Service
+  # =========================
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - streamland-whisper
+
+      - --image
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPOSITORY}/${_IMAGE_NAME}:$SHORT_SHA
+
+      - --region
+      - ${_REGION}
+
+      - --platform
+      - managed
+
+      - --allow-unauthenticated
+
+      - --execution-environment
+      - gen2
+
+      # GPU
+      - --gpu
+      - "1"
+
+      - --gpu-type
+      - nvidia-l4
+
+      # Resources
+      - --cpu
+      - "4"
+
+      - --memory
+      - 16Gi
+
+      - --concurrency
+      - "1"
+
+      # Long AI requests
+      - --timeout
+      - "900"
+
+      # Environment
+      - --set-env-vars
+      - SERVICE_MODE=gpu,WHISPER_DEVICE=cuda,WHISPER_COMPUTE_TYPE=float16
+
+  # =========================
+  # Deploy CPU Text Service
+  # =========================
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - streamland-text
+
+      - --image
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPOSITORY}/${_IMAGE_NAME}:$SHORT_SHA
+
+      - --region
+      - ${_REGION}
+
+      - --platform
+      - managed
+
+      - --allow-unauthenticated
+
+      - --execution-environment
+      - gen2
+
+      # CPU only
+      - --cpu
+      - "1"
+
+      - --memory
+      - 2Gi
+
+      - --concurrency
+      - "10"
+
+      - --timeout
+      - "300"
+
+      # Environment
+      - --set-env-vars
+      - SERVICE_MODE=cpu
 
 images:
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPOSITORY}/${_IMAGE_NAME}:$SHORT_SHA
