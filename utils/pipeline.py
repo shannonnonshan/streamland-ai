@@ -43,21 +43,3 @@ class Pipeline:
             "summary": summary
         }
     
-    def rag_chat(self, query, context):
-        """Chat with RAG context using embeddings and LLM."""
-        if "embeddings" not in self.models or "llama" not in self.models:
-            raise ValueError("embeddings and llama models required")
-        
-        # Step 1: Embed query
-        query_embedding = self.models["embeddings"].embed(query)
-        
-        # Step 2: Search similar context (mocked)
-        # TODO: Implement FAISS search
-        
-        # Step 3: Generate response
-        response = self.models["llama"].generate(f"Context: {context}\n\nQ: {query}")
-        
-        return {
-            "query": query,
-            "response": response
-        }

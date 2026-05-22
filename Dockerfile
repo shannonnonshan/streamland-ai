@@ -27,6 +27,5 @@ RUN python3 -m pip install --index-url https://download.pytorch.org/whl/cu128 \
 
 COPY . .
 
-EXPOSE 8080
-
-CMD ["uvicorn", "api.server:app", "--host", "0.0.0.0", "--port", "8080"]
+# Use the PORT environment variable injected by Cloud Run, default to 8080 locally
+CMD ["sh", "-c", "uvicorn api.server:app --host 0.0.0.0 --port ${PORT:-8080}"]

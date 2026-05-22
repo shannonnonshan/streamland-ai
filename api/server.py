@@ -1,7 +1,7 @@
 """
 StreamLand AI - API Server
-Purpose: Multi-model API for speech, text, embeddings, and content moderation
-Supports 5 models: Whisper, Embeddings, Llama, Moderation, Summarization
+Purpose: Multi-model API for speech, text, and content moderation
+Supports 3 models: Whisper, Moderation, Summarization
 Dynamic model loading from Hugging Face Hub or local disk
 """
 
@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from utils.model_loader import ModelLoader
 from utils.config import ModelConfig
-from api.endpoints import transcribe, search, chat, moderation, summarize
+from api.endpoints import transcribe, moderation, summarize
 from api import model_registry
 
 # GPU probe (import lazily to avoid hard dependency failures)
@@ -35,7 +35,7 @@ logger = logging.getLogger("streamland.api")
 
 app = FastAPI(
     title="StreamLand AI API",
-    description="Multi-model AI API for speech, text, embeddings, and content moderation",
+    description="Multi-model AI API for speech, text, and content moderation",
     version="1.0.0"
 )
 
@@ -79,22 +79,6 @@ def init_models():
         )
         print("✓ Whisper loaded")
 
-        print("[INIT] Loading Embeddings model...")
-        model_registry.models["embeddings"] = ModelLoader.load_model(
-            "embeddings",
-            model_path=ModelConfig.EMBEDDINGS_MODEL,
-            from_hf=ModelConfig.EMBEDDINGS_USE_HF
-        )
-        print("✓ Embeddings loaded")
-
-        # print("[INIT] Loading LLama model...")
-        # model_registry.models["llama"] = ModelLoader.load_model(
-        #     "llama",
-        #     model_path=ModelConfig.LLAMA_MODEL,
-        #     from_hf=ModelConfig.LLAMA_USE_HF
-        # )
-        # print("✓ LLama loaded")
-
         # print("[INIT] Loading Moderation model...")
         # model_registry.models["moderation"] = ModelLoader.load_model(
         #     "moderation",
@@ -130,8 +114,6 @@ async def root():
     return {"ok": True, "message": "StreamLand AI API is running. Check /health for status."}     
 # Register routers
 app.include_router(transcribe.router)
-app.include_router(search.router)
-# app.include_router(chat.router)
 # app.include_router(recommend.router)
 app.include_router(moderation.router)
 app.include_router(summarize.router)
@@ -176,8 +158,6 @@ async def list_models():
     return {
         "available": [
             {"name": "whisper", "type": "STT", "purpose": "Speech-to-Text"},
-            {"name": "embeddings", "type": "Embeddings", "purpose": "Search & Recommendations"},
-            # {"name": "llama", "type": "LLM", "purpose": "Chat & RAG"},
             {"name": "moderation", "type": "Safety", "purpose": "Mixed EN/VI content moderation"},
             {"name": "summarization", "type": "NLG", "purpose": "Text Summarization"},
         ],

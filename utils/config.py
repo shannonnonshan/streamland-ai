@@ -13,21 +13,6 @@ class ModelConfig:
     WHISPER_MODEL = os.getenv("WHISPER_MODEL_PATH", "shannonnonshan/streamland-whisper-ct2")
     WHISPER_USE_HF = os.getenv("WHISPER_USE_HF", "true").lower() == "true"
     
-    # Embeddings - Search & Recommend
-    EMBEDDINGS_MODEL = os.getenv(
-        "SEARCH_MODEL_PATH",
-        os.getenv("EMBEDDINGS_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
-    )
-    EMBEDDINGS_USE_HF = os.getenv("EMBEDDINGS_USE_HF", "true").lower() == "true"
-    FAISS_INDEX_PATH = os.getenv("FAISS_INDEX_PATH", "embeddings.faiss")
-    FAISS_METADATA_PATH = os.getenv("FAISS_METADATA_PATH", "embeddings.meta.json")
-    SEARCH_CORPUS_PATH = os.getenv("SEARCH_CORPUS_PATH", "data/search_corpus.jsonl")
-    
-    # LLM - Chat & RAG
-    LLAMA_MODEL = os.getenv("LLAMA_MODEL", "meta-llama/Llama-2-7b-chat-hf")
-    LLAMA_USE_HF = os.getenv("LLAMA_USE_HF", "true").lower() == "true"
-    LLAMA_DEVICE = os.getenv("LLAMA_DEVICE", "cpu")  # cpu or cuda
-    
     # Moderation - Content Safety
     MODERATION_MODEL = os.getenv("MODERATION_MODEL", "detoxify")
     MODERATION_USE_HF = os.getenv("MODERATION_USE_HF", "false").lower() == "true"

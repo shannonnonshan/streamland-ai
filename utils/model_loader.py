@@ -15,8 +15,6 @@ class ModelLoader:
     # Available model types
     AVAILABLE_MODELS = {
         "whisper": "models.whisper.interface.WhisperModel",
-        "embeddings": "models.embeddings.interface.EmbeddingModel",
-        "llama": "models.llama.interface.LlamaModel",
         "moderation": "models.moderation.interface.ModerationModel",
         "summarization": "models.summarization.interface.SummarizationModel",
     }
@@ -27,7 +25,7 @@ class ModelLoader:
         Load a model by type.
         
         Args:
-            model_type (str): Type of model ('whisper', 'embeddings', 'llama', 'moderation', 'summarization')
+            model_type (str): Type of model ('whisper', 'moderation', 'summarization')
             model_path (str): Path to model or HF model ID
             from_hf (bool): Whether to load from Hugging Face Hub
             **kwargs: Additional model-specific arguments
@@ -89,8 +87,6 @@ class ModelLoader:
         """Return dict of available models and their descriptions."""
         return {
             "whisper": "Speech-to-Text (STT) - Detect giọng nói",
-            "embeddings": "Text Embeddings - Search & Recommendations",
-            "llama": "LLM - Chat QA & RAG",
             "moderation": "Content Moderation - Text & Image Safety",
             "summarization": "Text Summarization - Tóm tắt nội dung",
         }

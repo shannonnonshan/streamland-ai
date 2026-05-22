@@ -12,7 +12,6 @@ StreamLand AI is a modular, production-ready API that orchestrates multiple stat
 | **BART/ViT5** | Text Summarization | ✅ Active |
 | **Moderation** | Content Moderation + Detoxification | ✅ Active |
 | **Embeddings** | Semantic Search & Recommendations | ⏳ Planned |
-| **Llama** | Chat & RAG | ⏳ Planned |
 
 ## 🚀 Quick Start
 
@@ -65,9 +64,6 @@ streamland-ai/
 │       ├── transcribe.py          # Speech-to-text endpoint
 │       ├── summarize.py           # Text summarization endpoint
 │       ├── moderation.py          # Content moderation endpoint
-│       ├── chat.py                # LLM chat (future)
-│       ├── search.py              # Semantic search (future)
-│       └── recommend.py           # Recommendations (future)
 │
 ├── models/
 │   ├── base.py                    # Abstract model interface
@@ -79,11 +75,6 @@ streamland-ai/
 │   ├── moderation/
 │   │   ├── interface.py           # Moderation engine
 │   │   └── __init__.py
-│   ├── embeddings/
-│   │   └── interface.py           # Embeddings (future)
-│   └── llama/
-│       └── interface.py           # LLM (future)
-│
 ├── utils/
 │   ├── config.py                  # Centralized configuration
 │   ├── model_loader.py            # Dynamic model loading
