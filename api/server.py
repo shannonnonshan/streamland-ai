@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from api import model_registry
-from api.endpoints import transcribe, chat, summarize
+from api.endpoints import transcribe, chat, summarize, moderation
 from api.endpoints import search as search_endpoint
 from utils.config import ModelConfig
 from utils.model_loader import ModelLoader
@@ -134,14 +134,6 @@ def init_models():
         )
         print("✓ Chatbot loaded")
 
-        # print("[INIT] Loading Moderation model...")
-        # model_registry.models["moderation"] = ModelLoader.load_model(
-        #     "moderation",
-        #     model_path=ModelConfig.MODERATION_MODEL,
-        #     from_hf=ModelConfig.MODERATION_USE_HF
-        # )
-        # print("✓ Moderation loaded")
-        
         # Load Summarization
         print("[INIT] Loading Summarization model...")
         model_registry.models["summarization"] = ModelLoader.load_model(
@@ -166,7 +158,7 @@ async def startup_event():
 app.include_router(transcribe.router)
 app.include_router(search_endpoint.router)
 app.include_router(chat.router)
-# app.include_router(moderation.router)
+app.include_router(moderation.router)
 app.include_router(summarize.router)
 
 
@@ -213,7 +205,7 @@ async def list_models():
             {"name": "whisper", "type": "STT", "purpose": "Speech-to-Text"},
             {"name": "embeddings", "type": "Embeddings", "purpose": "Search & Recommendations"},
             {"name": "chatbot", "type": "Chat", "purpose": "Conversational QA"},
-            # {"name": "moderation", "type": "Safety", "purpose": "Content Moderation"},
+            {"name": "moderation", "type": "Safety", "purpose": "Content Moderation"},
             {"name": "summarization", "type": "NLG", "purpose": "Text Summarization"},
         ],
         "loaded": {key: model.info() for key, model in model_registry.models.items()}
