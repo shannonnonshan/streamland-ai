@@ -32,7 +32,7 @@ RUN python3 -m pip install \
 COPY requirements.txt .
 
 RUN python3 -m pip install -r requirements.txt
-
+RUN python3 scripts/build_search_index.py
 # Copy source code
 COPY . .
 
