@@ -29,4 +29,4 @@ COPY . .
 
 EXPOSE 8080
 
-CMD ["python3", "-m", "api.server"]
+CMD ["uvicorn", "api.server:app", "--host", "0.0.0.0", "--port", "8080"]

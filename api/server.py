@@ -119,10 +119,13 @@ def init_models():
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize models on server startup."""
+    import asyncio
+
+    asyncio.create_task(load_models_background())
+
+async def load_models_background():
     init_models()
-
-
+    
 # Register routers
 app.include_router(transcribe.router)
 app.include_router(search.router)
@@ -182,7 +185,16 @@ async def list_models():
 
 if __name__ == "__main__":
     import uvicorn
-    from utils.config import ModelConfig
-    
-    print(f"\n🚀 Starting StreamLand AI API on {ModelConfig.API_HOST}:{ModelConfig.API_PORT}")
-    uvicorn.run(app, host=ModelConfig.API_HOST, port=ModelConfig.API_PORT, reload=False, log_level="info")
+
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", 8080))
+
+    print(f"\n🚀 Starting StreamLand AI API on {host}:{port}")
+
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        reload=False,
+        log_level="info"
+    )
