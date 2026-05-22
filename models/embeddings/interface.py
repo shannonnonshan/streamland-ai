@@ -15,6 +15,7 @@ class EmbeddingModel(BaseModel):
     def __init__(self, model_path: str, from_hf: bool = False):
         super().__init__(model_path=model_path, from_hf=from_hf)
         self.device, self.device_label, self.dtype = self._resolve_device()
+        self.use_sentence_transformer = False
         self._load_model()
 
     @property
@@ -96,22 +97,38 @@ class EmbeddingModel(BaseModel):
         load_kwargs: Dict[str, Any] = {}
         if token:
             load_kwargs["token"] = token
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_path, **load_kwargs)
+            self.model = AutoModel.from_pretrained(self.model_path, **load_kwargs)
 
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_path, **load_kwargs)
-        self.model = AutoModel.from_pretrained(self.model_path, **load_kwargs)
+            self.model.eval()
 
-        self.model.eval()
+            if self.device in {"cuda", "mps"} and self.dtype in {torch.float16, torch.bfloat16}:
+                self.model = self.model.to(self.device, dtype=self.dtype)
+            else:
+                self.model = self.model.to(self.device)
 
-        if self.device in {"cuda", "mps"} and self.dtype in {torch.float16, torch.bfloat16}:
-            self.model = self.model.to(self.device, dtype=self.dtype)
-        else:
-            self.model = self.model.to(self.device)
+            logger.info(
+                "Loaded embeddings model: %s | device=%s | dtype=%s",
+                self.model_path,
+                self.device_label,
+                self.dtype,
+            )
+            return
+        except Exception as exc:
+            logger.warning("AutoModel load failed: %s. Falling back to SentenceTransformer.", exc)
 
+        try:
+            from sentence_transformers import SentenceTransformer
+        except ImportError as exc:
+            raise ImportError("sentence-transformers is required for this embeddings model") from exc
+
+        self.use_sentence_transformer = True
+        self.model = SentenceTransformer(self.model_path, device=self.device)
         logger.info(
-            "Loaded embeddings model: %s | device=%s | dtype=%s",
+            "Loaded SentenceTransformer model: %s | device=%s",
             self.model_path,
             self.device_label,
-            self.dtype,
         )
 
     def process_input(self, input_data: Union[str, List[str]]) -> List[str]:
@@ -136,6 +153,18 @@ class EmbeddingModel(BaseModel):
         return summed / counts
 
     def infer(self, processed_input: List[str]) -> Dict[str, Any]:
+        if self.use_sentence_transformer:
+            embeddings = self.model.encode(
+                processed_input,
+                convert_to_numpy=True,
+                normalize_embeddings=True,
+                show_progress_bar=False,
+            ).astype(np.float32)
+            return {
+                "model": self.model_path,
+                "embeddings": embeddings.tolist(),
+            }
+
         with torch.no_grad():
             encoded = self.tokenizer(
                 processed_input,

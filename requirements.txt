@@ -2,6 +2,7 @@ transformers
 accelerate
 huggingface_hub
 unsloth
+sentence-transformers
 librosa
 soundfile
 sentencepiece
@@ -16,6 +17,8 @@ pydantic
 
 numpy
 sentencepiece
+torch
+faiss-cpu
 
 librosa
 soundfile
