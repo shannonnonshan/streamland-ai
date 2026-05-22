@@ -3,10 +3,6 @@ StreamLand AI - API Server
 Supports:
 - Whisper GPU service
 - Moderation/Summarization CPU service
-
-SERVICE_MODE:
-- gpu  -> Whisper routes only
-- cpu  -> Moderation + Summarization routes
 """
 
 import logging
@@ -101,22 +97,19 @@ async def log_requests(request: Request, call_next):
 
     return response
 
+
 def init_models():
     """Initialize all models on startup."""
     try:
         model_registry.models.clear()
 
-        # Load Whisper (STT) unless Replicate proxying is enabled
-        if ModelConfig.REPLICATE_USE:
-            print("[INIT] Replicate proxy enabled. Skipping local Whisper load.")
-        else:
-            print("[INIT] Loading Whisper model...")
-            model_registry.models["whisper"] = ModelLoader.load_model(
-                "whisper",
-                model_path=ModelConfig.WHISPER_MODEL,
-                from_hf=ModelConfig.WHISPER_USE_HF
-            )
-            print("✓ Whisper loaded")
+        print("[INIT] Loading Whisper model...")
+        model_registry.models["whisper"] = ModelLoader.load_model(
+            "whisper",
+            model_path=ModelConfig.WHISPER_MODEL,
+            from_hf=ModelConfig.WHISPER_USE_HF
+        )
+        print("✓ Whisper loaded")
 
         print("[INIT] Loading Embeddings model...")
         model_registry.models["embeddings"] = ModelLoader.load_model(
@@ -134,7 +127,6 @@ def init_models():
         )
         print("✓ Chatbot loaded")
 
-        # Load Summarization
         print("[INIT] Loading Summarization model...")
         model_registry.models["summarization"] = ModelLoader.load_model(
             "summarization",
@@ -142,8 +134,9 @@ def init_models():
             from_hf=ModelConfig.SUMMARIZATION_USE_HF
         )
         print("✓ Summarization loaded")
-        
+
         print("\n✓ All models loaded successfully!")
+
     except Exception as e:
         print(f"✗ Failed to load models: {e}")
 
@@ -154,7 +147,10 @@ async def startup_event():
     init_models()
 
 
+# =========================
 # Register routers
+# =========================
+
 app.include_router(transcribe.router)
 app.include_router(search_endpoint.router)
 app.include_router(chat.router)
@@ -164,6 +160,7 @@ app.include_router(summarize.router)
 
 @app.get("/health")
 async def health_check():
+
     gpu_info = {
         "torch_present": bool(torch),
         "cuda_available": False,
@@ -200,6 +197,7 @@ async def health_check():
 @app.get("/models")
 async def list_models():
     """List loaded models with their info."""
+
     return {
         "available": [
             {"name": "whisper", "type": "STT", "purpose": "Speech-to-Text"},
@@ -208,7 +206,10 @@ async def list_models():
             {"name": "moderation", "type": "Safety", "purpose": "Content Moderation"},
             {"name": "summarization", "type": "NLG", "purpose": "Text Summarization"},
         ],
-        "loaded": {key: model.info() for key, model in model_registry.models.items()}
+        "loaded": {
+            key: model.info()
+            for key, model in model_registry.models.items()
+        }
     }
 
 

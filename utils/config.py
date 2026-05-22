@@ -59,8 +59,4 @@ class ModelConfig:
     API_HOST = os.getenv("API_HOST", "0.0.0.0")
     API_PORT = int(os.getenv("API_PORT", 8000))
 
-    # Replicate configuration
-    REPLICATE_USE = os.getenv("REPLICATE_USE", "false").lower() == "true"
-    REPLICATE_MODEL = os.getenv("REPLICATE_MODEL", "shannonnonshan/streamland-whisper")
-    REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
 

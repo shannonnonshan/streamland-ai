@@ -5,7 +5,6 @@ unsloth
 librosa
 soundfile
 sentencepiece
-replicate
 faster-whisper
 fastapi
 uvicorn[standard]
