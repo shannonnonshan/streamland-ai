@@ -143,19 +143,25 @@ class SummarizationModel(BaseModel):
             return None
 
     def _switch_model_for_language(self, language: str):
-        """Switch to appropriate model for detected language."""
         if language not in self.SUPPORTED_MODELS:
             return False
 
+        target_model = self.SUPPORTED_MODELS[language]
+
         if self.current_language == language:
-            print(f"[INFO] Already using model for {language}, skipping reload")
             return True
 
-        model_path = self.SUPPORTED_MODELS[language]
-        print(f"[INFO] Switching model: {self.model_path} -> {model_path}")
-        self.model_path = model_path
+        # tránh reload cùng model
+        if self.model_path == target_model:
+            self.current_language = language
+            return True
+
+        print(f"[INFO] Switching model: {self.model_path} -> {target_model}")
+
+        self.model_path = target_model
         self._load_model()
         self.current_language = language
+
         return True
 
     @property
@@ -237,7 +243,9 @@ class SummarizationModel(BaseModel):
         self.tokenizer = tokenizer
         self.model = model
 
-        pipeline_task = "summarization" if "bart" in candidate_lower else "text2text-generation"
+        # Some transformers builds do not register the summarization pipeline task.
+        # Use the generic text2text-generation task so model loading stays portable.
+        pipeline_task = "text2text-generation"
 
         # Use task that matches model family output format.
         pipeline_kwargs = {

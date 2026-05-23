@@ -27,13 +27,8 @@ def get_summarization_model():
     return _require_model("summarization", "summarization")
 
 
-@lru_cache(maxsize=1)
-def _get_moderation_singleton():
-    return ModerationModel()
-
-
 def get_moderation_model():
-    return _get_moderation_singleton()
+    return _require_model("moderation", "moderation")
 
 
 def get_chatbot_model():

@@ -110,7 +110,23 @@ def init_models():
             from_hf=ModelConfig.WHISPER_USE_HF
         )
         print("✓ Whisper loaded")
-
+        
+        print("[INIT] Loading Summarization model...")
+        model_registry.models["summarization"] = ModelLoader.load_model(
+            "summarization",
+            model_path=ModelConfig.SUMMARIZATION_MODEL,
+            from_hf=ModelConfig.SUMMARIZATION_USE_HF
+        )
+        print("✓ Summarization loaded")
+        
+        print("[INIT] Loading Moderation model...")
+        model_registry.models["moderation"] = ModelLoader.load_model(
+            "moderation",
+            model_path=ModelConfig.MODERATION_MODEL,
+            from_hf=ModelConfig.MODERATION_USE_HF
+        )
+        print("✓ Moderation loaded")
+        
         print("[INIT] Loading Embeddings model...")
         model_registry.models["embeddings"] = ModelLoader.load_model(
             "embeddings",
@@ -127,13 +143,7 @@ def init_models():
         )
         print("✓ Chatbot loaded")
 
-        print("[INIT] Loading Summarization model...")
-        model_registry.models["summarization"] = ModelLoader.load_model(
-            "summarization",
-            model_path=ModelConfig.SUMMARIZATION_MODEL,
-            from_hf=ModelConfig.SUMMARIZATION_USE_HF
-        )
-        print("✓ Summarization loaded")
+
 
         print("\n✓ All models loaded successfully!")
 
