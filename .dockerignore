@@ -56,9 +56,15 @@ hf_cache/
 *.pth
 
 # =========================
-# FAISS / embeddings generated locally
+# FAISS generated locally
 # =========================
 *.faiss
+
+# =========================
+# IMPORTANT:
+# KHÔNG ignore data nữa
+# =========================
+# data/   <-- XÓA DÒNG NÀY NẾU CÓ
 
 # =========================
 # OS files
