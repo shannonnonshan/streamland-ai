@@ -12,6 +12,14 @@
 
 # Exclude Python cache files
 __pycache__
+.venv
+*.pyc
+.cache
+models
+*.pt
+*.bin
+*.safetensors
+*.faiss
 .mypy_cache
 .pytest_cache
 .ruff_cache
