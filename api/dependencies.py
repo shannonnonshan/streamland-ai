@@ -1,11 +1,10 @@
 """FastAPI dependencies for fetching loaded model instances."""
 
-from functools import lru_cache
-
 from fastapi import HTTPException
 
 from api.model_registry import models
-from models.moderation.interface import ModerationModel
+from utils.config import ModelConfig
+from utils.model_loader import ModelLoader
 
 
 def _require_model(model_key: str, expected_type: str):
@@ -28,7 +27,22 @@ def get_summarization_model():
 
 
 def get_moderation_model():
-    return _require_model("moderation", "moderation")
+    model = models.get("moderation")
+    if model is None:
+        try:
+            model = ModelLoader.load_model(
+                "moderation",
+                model_path=ModelConfig.MODERATION_MODEL,
+                from_hf=ModelConfig.MODERATION_USE_HF,
+            )
+            models["moderation"] = model
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail=f"moderation model is not loaded: {exc}")
+
+    if getattr(model, "model_type", None) != "moderation":
+        raise HTTPException(status_code=500, detail="Loaded model type mismatch: expected moderation")
+
+    return model
 
 
 def get_chatbot_model():

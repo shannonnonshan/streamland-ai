@@ -430,22 +430,19 @@ class ModerationModel(BaseModel):
 
         if query_vector is None:
             query_words = set(_word_tokens(text))
-            ranked = []
+            ranked: List[Tuple[float, Dict[str, Any]]] = []
             for example in examples:
                 example_words = set(_word_tokens(example["text"]))
                 overlap = len(query_words & example_words)
-                denom = max(1, len(query_words | example_words))
-                similarity = overlap / denom
+                similarity = float(overlap) / max(1, len(example_words))
                 ranked.append((similarity, example))
         else:
             ranked = []
-            query_norm = float(np.linalg.norm(query_vector)) or 1.0
             for example in examples:
                 example_vector = self._embed_text(example["text"])
                 if example_vector is None:
                     continue
-                example_norm = float(np.linalg.norm(example_vector)) or 1.0
-                similarity = float(np.dot(query_vector, example_vector) / (query_norm * example_norm))
+                similarity = float(np.dot(query_vector, example_vector))
                 ranked.append((similarity, example))
 
         ranked.sort(key=lambda item: item[0], reverse=True)
@@ -478,14 +475,8 @@ class ModerationModel(BaseModel):
 
         span_scores = [span.score for span in scored_spans if span.span_type != "boundary"] or [0.0]
         full_scores = [span.score for span in scored_spans if span.span_type == "full"] or [span_scores[-1]]
-        overall = 0.5 * max(span_scores) + 0.3 * float(np.mean(span_scores)) + 0.2 * float(np.mean(full_scores))
-
+        overall = 0.7 * max(span_scores) + 0.3 * max(full_scores)
         categories = sorted({category for span in scored_spans for category in span.categories})
-        if any(category in {"threat", "hate"} for category in categories):
-            overall = min(1.0, overall * 1.2)
-        elif categories and all(category == "profanity" for category in categories):
-            overall = min(1.0, overall * 0.85)
-
         return round(float(overall), 4), categories
 
     def _decision(self, score: float) -> str:
@@ -535,22 +526,10 @@ class ModerationModel(BaseModel):
         normalized = lexicon_result["normalized"]
         if lexicon_result["safe"]:
             return {
-                "label": SAFE,
+                "status": SAFE,
                 "score": 0.0,
                 "categories": [],
-                "matched_spans": [],
-                "detoxified_text": None,
-                "original_score": 0.0,
-                "detox_score": None,
-                "rewrite_successful": False,
-                "diagnostics": {
-                    "normalized_text": normalized,
-                    "lexicon_hits": [],
-                    "language_stats": {"en_ratio": 0.0, "vi_ratio": 0.0, "mixed": False},
-                    "greyzone_examples": {},
-                    "span_count": 0,
-                    "early_exit": True,
-                },
+                "toxic_word": [],
             }
 
         language_spans, language_stats = self._split_language_spans(normalized)
@@ -567,45 +546,11 @@ class ModerationModel(BaseModel):
                     span.score = nudged_score
 
         overall_score, categories = self._fuse_scores(scored_spans)
-        label = self._decision(overall_score)
+        status = self._decision(overall_score)
 
-        matched_spans = [
-            {
-                "text": span.text,
-                "lang": span.lang,
-                "score": round(float(span.score), 4),
-                "categories": span.categories,
-                "span_type": span.span_type,
-            }
-            for span in scored_spans
-            if span.score >= self.greyzone_lower or span.categories
-        ]
-
-        result: Dict[str, Any] = {
-            "label": label,
+        return {
+            "status": status,
             "score": round(float(overall_score), 4),
             "categories": categories,
-            "matched_spans": matched_spans,
-            "detoxified_text": None,
-            "original_score": round(float(overall_score), 4),
-            "detox_score": None,
-            "rewrite_successful": False,
-            "diagnostics": {
-                "normalized_text": normalized,
-                "lexicon_hits": lexicon_result["hits"],
-                "language_stats": language_stats,
-                "greyzone_examples": greyzone_examples,
-                "span_count": len(scored_spans),
-                "rewrite_model": self.rewrite_model_id,
-            },
+            "toxic_word": sorted(set(lexicon_result["hits"])),
         }
-
-        if label == REVIEW and rewrite:
-            rewritten_text = self._rewrite_review_text(normalized, scored_spans)
-            rewrite_result = self.evaluate(rewritten_text, rewrite=False, skip_rag=True)
-            result["detoxified_text"] = rewritten_text
-            result["detox_score"] = rewrite_result["score"]
-            result["rewrite_successful"] = rewrite_result["score"] < overall_score
-            result["rewrite_result"] = rewrite_result
-
-        return result

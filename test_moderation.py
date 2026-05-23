@@ -9,7 +9,7 @@ import json
 from typing import Dict, List
 
 # API endpoint
-BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = "http://127.0.0.1:8080"
 MODERATION_ENDPOINT = f"{BASE_URL}/moderation/text"
 
 # Test cases: (language, text, description)
@@ -113,13 +113,9 @@ def print_result(case_num: int, lang: str, text: str, description: str, result: 
     
     if "moderation" in result:
         mod = result["moderation"]
-        print(f"Label: {mod['label']} (score: {mod['score']:.3f})")
-        if mod.get("categories"):
-            print(f"Categories: {', '.join(mod['categories'])}")
-        if mod.get("matched_spans"):
-            print(f"Matched spans: {len(mod['matched_spans'])} found")
-        if mod["label"] == "REVIEW" and mod.get("detoxified_text"):
-            print(f"Detoxified: {mod['detoxified_text'][:60]}...")
+        print(f"Status: {mod.get('status')} (score: {mod.get('score', 0.0):.3f})")
+        print(f"Toxic words: {mod.get('toxic_word', [])}")
+        print(f"Categories: {mod.get('categories', [])}")
     elif "error" in result:
         print(f"Error: {result['error']}")
     else:
@@ -170,27 +166,19 @@ def test_moderation(rewrite: bool = False) -> None:
                         print(json.dumps(result, indent=2, ensure_ascii=False)[:800])
                     
                     if result.get("status") == "success":
-                        # Extract moderation from the correct location
                         moderation = result.get("moderation", {})
-                        label = moderation.get("label", "ERROR")
+                        status = moderation.get("status", "ERROR")
                         score = moderation.get("score", 0)
                         
-                        # Count results - convert label to lowercase to match dictionary keys
-                        label_key = label.lower() if label else "error"
-                        if label_key in results_summary:
-                            results_summary[label_key] += 1
+                        status_key = status.lower() if status else "error"
+                        if status_key in results_summary:
+                            results_summary[status_key] += 1
                         else:
                             results_summary["error"] += 1
                         
-                        print(f"Label: {label} (score: {score:.3f})")
-                        if moderation.get("categories"):
-                            print(f"Categories: {', '.join(moderation['categories'])}")
-                        
-                        # Show toxic words analysis
-                        print_toxic_analysis(moderation)
-                        
-                        if label == "REVIEW" and moderation.get("detoxified_text"):
-                            print(f"Detoxified: {moderation['detoxified_text'][:60]}...")
+                        print(f"Status: {status} (score: {score:.3f})")
+                        print(f"Toxic words: {moderation.get('toxic_word', [])}")
+                        print(f"Categories: {moderation.get('categories', [])}")
                     else:
                         print(f"Response Status: {result.get('status')}")
                         print(f"Error: {result.get('error', 'Unknown')}")
