@@ -28,9 +28,10 @@ RUN python3 -m pip install --upgrade pip setuptools wheel
 # Install PyTorch CUDA 12.4
 RUN python3 -m pip install \
     --index-url https://download.pytorch.org/whl/cu124 \
-    torch torchvision torchaudio
+    torch==2.5.1 \
+    torchvision==0.20.1 \
+    torchaudio==2.5.1
 
-# Install Python dependencies
 COPY requirements.txt .
 
 RUN python3 -m pip install -r requirements.txt
