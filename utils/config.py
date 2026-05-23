@@ -37,7 +37,7 @@ class ModelConfig:
     CHATBOT_USE_HF = os.getenv("CHATBOT_USE_HF", "true").lower() == "true"
     CHATBOT_BASE_MODEL = os.getenv(
         "CHATBOT_BASE_MODEL",
-        "unsloth/Qwen2.5-7B-Instruct-bnb-4bit",
+        "unsloth/Qwen2-1.5B-Instruct-bnb-4bit",
     )
     CHATBOT_USE_UNSLOTH = os.getenv("CHATBOT_USE_UNSLOTH", "true").lower() == "true"
     CHATBOT_LOAD_IN_4BIT = os.getenv("CHATBOT_LOAD_IN_4BIT", "false").lower() == "true"
