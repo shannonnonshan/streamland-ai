@@ -11,6 +11,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 WORKDIR /app
 
+ENV PYTHONPATH=/app
+
 # System dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
