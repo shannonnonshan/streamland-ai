@@ -9,7 +9,6 @@ from typing import Dict, Any, Union, List
 import numpy as np
 import torch
 
-from pydub import AudioSegment
 from faster_whisper import (
     WhisperModel as FasterWhisperModel
 )
@@ -77,6 +76,10 @@ class WhisperModel(BaseModel):
             self.device_label,
             self.compute_type
         ) = self._resolve_device()
+
+        self.vad_model = None
+        self.get_speech_timestamps = None
+        self.read_audio = None
 
         self._load_model()
         self._load_vad()
@@ -265,26 +268,32 @@ class WhisperModel(BaseModel):
     # =====================================================
 
     def _load_vad(self):
+        logger.info("Loading Silero VAD...")
 
-        logger.info(
-            "Loading Silero VAD..."
-        )
-
-        self.vad_model, utils = (
-            torch.hub.load(
-                repo_or_dir="snakers4/silero-vad",
-                model="silero_vad",
-                force_reload=False,
-                trust_repo=True
+        try:
+            self.vad_model, utils = (
+                torch.hub.load(
+                    repo_or_dir="snakers4/silero-vad",
+                    model="silero_vad",
+                    force_reload=False,
+                    trust_repo=True
+                )
             )
-        )
 
-        (
-            self.get_speech_timestamps,
-            _,
-            self.read_audio,
-            *_
-        ) = utils
+            (
+                self.get_speech_timestamps,
+                _,
+                self.read_audio,
+                *_
+            ) = utils
+        except Exception as e:
+            logger.warning(
+                "Silero VAD unavailable (%s). Falling back to direct transcription.",
+                e,
+            )
+            self.vad_model = None
+            self.get_speech_timestamps = None
+            self.read_audio = None
 
     # =====================================================
     # INPUT
@@ -335,6 +344,15 @@ class WhisperModel(BaseModel):
         output_path: str,
         threshold: float = 0.5
     ) -> bool:
+
+        if self.vad_model is None or self.get_speech_timestamps is None:
+            wav, _ = librosa.load(
+                audio_path,
+                sr=16000,
+                mono=True
+            )
+            sf.write(output_path, wav, 16000)
+            return True
 
         # =========================================
         # LOAD AUDIO WITH LIBROSA
@@ -636,29 +654,27 @@ class WhisperModel(BaseModel):
         ]
     ) -> Dict[str, Any]:
 
-        # =================================================
-        # SPEECH ONLY FILE
-        # =================================================
+        use_pre_vad = os.getenv("WHISPER_USE_PRE_VAD", "true").strip().lower() == "true"
+        use_pre_vad = use_pre_vad and self.vad_model is not None and self.get_speech_timestamps is not None
 
-        speech_audio_path = (
-            f"{processed_input}.speech.wav"
-        )
+        transcribe_input = processed_input
+        speech_audio_path = f"{processed_input}.speech.wav"
 
-        has_speech = (
-            self._extract_speech_only(
+        if use_pre_vad:
+            has_speech = self._extract_speech_only(
                 processed_input,
                 speech_audio_path
             )
-        )
 
-        if not has_speech:
+            if not has_speech:
+                return {
+                    "text": "",
+                    "language": "en",
+                    "model": "whisper",
+                    "timestamps": [],
+                }
 
-            return {
-                "text": "",
-                "language": "en",
-                "model": "whisper",
-                "timestamps": [],
-            }
+            transcribe_input = speech_audio_path
 
         # =================================================
         # TRANSCRIBE
@@ -666,7 +682,7 @@ class WhisperModel(BaseModel):
 
         segments, info = (
             self.model.transcribe(
-                speech_audio_path,
+                transcribe_input,
                 beam_size=3,
                 vad_filter=True,
                 vad_parameters=dict(
@@ -805,14 +821,11 @@ class WhisperModel(BaseModel):
         # CLEANUP
         # =================================================
 
-        try:
-
-            os.remove(
-                speech_audio_path
-            )
-
-        except Exception:
-            pass
+        if use_pre_vad:
+            try:
+                os.remove(speech_audio_path)
+            except Exception:
+                pass
 
         full_text = " ".join(
             text_parts

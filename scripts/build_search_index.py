@@ -224,7 +224,7 @@ def main() -> None:
     index_path = ModelConfig.FAISS_INDEX_PATH
     metadata_path = ModelConfig.FAISS_METADATA_PATH
     batch_size = int(os.getenv("SEARCH_BATCH_SIZE", "32"))
-    source = os.getenv("SEARCH_SOURCE", "file").strip().lower()
+    source = os.getenv("SEARCH_SOURCE", "file").strip().lower().strip('"').strip("'")
 
     if source == "postgres":
         raw_records = _load_postgres_corpus()
