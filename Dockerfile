@@ -7,6 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     HF_HOME=/models/huggingface \
     TRANSFORMERS_CACHE=/models/huggingface \
     TRANSFORMERS_NO_TORCHAO=1 \
+    CHATBOT_USE_UNSLOTH=false \
     CC=gcc \
     CXX=g++ \
     PORT=8080
@@ -41,6 +42,10 @@ RUN python3 -m pip install \
 COPY requirements.txt .
 
 RUN python3 -m pip install -r requirements.txt
+
+# unsloth may pull torchao, but torchao currently requires newer torch APIs
+# and breaks transformers imports with torch 2.5.1. Remove it for runtime stability.
+RUN python3 -m pip uninstall -y torchao || true
 
 # Copy source code
 COPY . .
