@@ -39,6 +39,9 @@ venv/
 tmp/
 temp/
 cache/
+models_cache/
+embeddings.faiss
+embeddings.meta.json
 
 # =========================
 # HuggingFace / model cache
