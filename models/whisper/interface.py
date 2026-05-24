@@ -12,7 +12,7 @@ import torch
 from faster_whisper import WhisperModel as FasterWhisperModel
 
 from ..base import BaseModel
-
+from silero_vad import load_silero_vad, get_speech_timestamps as _get_ts
 torch.set_num_threads(1)
 
 logger = logging.getLogger(__name__)
@@ -168,18 +168,20 @@ class WhisperModel(BaseModel):
 
     def _load_vad(self):
         logger.info("Loading Silero VAD...")
-        self.vad_model, utils = torch.hub.load(
-            repo_or_dir="snakers4/silero-vad",
-            model="silero_vad",
-            force_reload=False,
-            trust_repo=True,
-        )
-        (
-            self.get_speech_timestamps,
-            _,
-            self.read_audio,
-            *_,
-        ) = utils
+        try:           
+            self.vad_model = load_silero_vad()
+            self.get_speech_timestamps = _get_ts
+            logger.info("Silero VAD loaded via silero-vad package")
+
+        except ImportError:
+            logger.warning("silero-vad package not found, falling back to torch.hub")
+            self.vad_model, utils = torch.hub.load(
+                repo_or_dir="snakers4/silero-vad",
+                model="silero_vad",
+                force_reload=False,
+                trust_repo=True,
+            )
+            (self.get_speech_timestamps, _, self.read_audio, *_) = utils
 
     # =====================================================
     # INPUT
@@ -562,7 +564,6 @@ class WhisperModel(BaseModel):
             logger.warning("Returning empty transcript — no speech found")
             return self._empty_result()
 
-            transcribe_input = speech_audio_path
 
         # =================================================
         # STEP 2 — WHISPER transcription

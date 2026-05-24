@@ -21,3 +21,5 @@ torch
 transformers
 unsloth
 uvicorn[standard]
+silero-vad       
+torchaudio        
