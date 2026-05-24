@@ -100,55 +100,42 @@ async def log_requests(request: Request, call_next):
 
 def init_models():
     """Initialize all models on startup."""
-    try:
-        model_registry.models.clear()
+    model_registry.models.clear()
 
-        print("[INIT] Loading Whisper model...")
-        model_registry.models["whisper"] = ModelLoader.load_model(
-            "whisper",
-            model_path=ModelConfig.WHISPER_MODEL,
-            from_hf=ModelConfig.WHISPER_USE_HF
-        )
-        print("✓ Whisper loaded")
-        
-        print("[INIT] Loading Summarization model...")
-        model_registry.models["summarization"] = ModelLoader.load_model(
-            "summarization",
-            model_path=ModelConfig.SUMMARIZATION_MODEL,
-            from_hf=ModelConfig.SUMMARIZATION_USE_HF
-        )
-        print("✓ Summarization loaded")
-        
-        print("[INIT] Loading Moderation model...")
-        model_registry.models["moderation"] = ModelLoader.load_model(
-            "moderation",
-            model_path=ModelConfig.MODERATION_MODEL,
-            from_hf=ModelConfig.MODERATION_USE_HF
-        )
-        print("✓ Moderation loaded")
-        
-        print("[INIT] Loading Embeddings model...")
-        model_registry.models["embeddings"] = ModelLoader.load_model(
-            "embeddings",
-            model_path=ModelConfig.EMBEDDINGS_MODEL,
-            from_hf=ModelConfig.EMBEDDINGS_USE_HF
-        )
-        print("✓ Embeddings loaded")
+    load_plan = [
+        ("whisper", ModelConfig.WHISPER_MODEL, ModelConfig.WHISPER_USE_HF),
+        ("summarization", ModelConfig.SUMMARIZATION_MODEL, ModelConfig.SUMMARIZATION_USE_HF),
+        ("moderation", ModelConfig.MODERATION_MODEL, ModelConfig.MODERATION_USE_HF),
+        ("embeddings", ModelConfig.EMBEDDINGS_MODEL, ModelConfig.EMBEDDINGS_USE_HF),
+        ("chatbot", ModelConfig.CHATBOT_MODEL, ModelConfig.CHATBOT_USE_HF),
+    ]
 
-        print("[INIT] Loading Chatbot model...")
-        model_registry.models["chatbot"] = ModelLoader.load_model(
-            "chatbot",
-            model_path=ModelConfig.CHATBOT_MODEL,
-            from_hf=ModelConfig.CHATBOT_USE_HF
-        )
-        print("✓ Chatbot loaded")
+    loaded_models = []
+    failed_models = []
 
+    for model_type, model_path, use_hf in load_plan:
+        print(f"[INIT] Loading {model_type.capitalize()} model...")
+        try:
+            model_registry.models[model_type] = ModelLoader.load_model(
+                model_type,
+                model_path=model_path,
+                from_hf=use_hf,
+            )
+            print(f"✓ {model_type.capitalize()} loaded")
+            loaded_models.append(model_type)
+        except Exception as exc:
+            failed_models.append((model_type, str(exc)))
+            print(f"✗ Failed to load {model_type}: {exc}")
 
+    if failed_models:
+        print("\n[INIT] Some models failed to load:")
+        for model_type, error in failed_models:
+            print(f"  - {model_type}: {error}")
 
-        print("\n✓ All models loaded successfully!")
-
-    except Exception as e:
-        print(f"✗ Failed to load models: {e}")
+    if loaded_models:
+        print(f"\n✓ Loaded models: {', '.join(loaded_models)}")
+    else:
+        print("\n✗ No models loaded successfully!")
 
 
 @app.on_event("startup")
