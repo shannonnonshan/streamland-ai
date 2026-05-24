@@ -7,6 +7,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     HF_HOME=/models/huggingface \
     TRANSFORMERS_CACHE=/models/huggingface \
     TRANSFORMERS_NO_TORCHAO=1 \
+    CC=gcc \
+    CXX=g++ \
     PORT=8080
 
 WORKDIR /app
@@ -17,6 +19,10 @@ ENV PYTHONPATH=/app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
+    python3-dev \
+    build-essential \
+    gcc \
+    g++ \
     ffmpeg \
     libsndfile1 \
     ca-certificates \
