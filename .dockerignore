@@ -1,27 +1,87 @@
-# The .dockerignore file excludes files from the container build process.
-#
-# https://docs.docker.com/engine/reference/builder/#dockerignore-file
+# =========================
+# Git
+# =========================
+.git
+.github
+.gitignore
 
-# Exclude Git files
-**/.git
-**/.github
-**/.gitignore
+# =========================
+# Python cache
+# =========================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Exclude Python tooling
-.python-version
+# =========================
+# Virtual environments
+# =========================
+.venv/
+venv/
 
-# Exclude Python cache files
-__pycache__
-.mypy_cache
-.pytest_cache
-.ruff_cache
-
-# Exclude Python virtual environment
-/venv
-
-# Exclude local runtime state and environment files
+# =========================
+# Environment files
+# =========================
 .env
 .env.*
-data/
-tmp/
+
+# =========================
+# Logs
+# =========================
 *.log
+
+# =========================
+# Local runtime/cache
+# =========================
+tmp/
+temp/
+cache/
+models_cache/
+embeddings.faiss
+embeddings.meta.json
+
+# =========================
+# HuggingFace / model cache
+# =========================
+models/huggingface/
+hf_cache/
+.cache/
+
+# =========================
+# Large model artifacts
+# =========================
+*.safetensors
+*.bin
+*.pt
+*.pth
+
+# =========================
+# FAISS generated locally
+# =========================
+*.faiss
+
+# =========================
+# IMPORTANT:
+# KHÔNG ignore data nữa
+# =========================
+# data/   <-- XÓA DÒNG NÀY NẾU CÓ
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# IDE
+# =========================
+.vscode/
+.idea/
+
+# =========================
+# Docker
+# =========================
+docker-compose.yml

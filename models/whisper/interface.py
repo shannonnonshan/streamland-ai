@@ -73,6 +73,10 @@ class WhisperModel(BaseModel):
             self.compute_type,
         ) = self._resolve_device()
 
+        self.vad_model = None
+        self.get_speech_timestamps = None
+        self.read_audio = None
+
         self._load_model()
         self._load_vad()
 
@@ -557,6 +561,8 @@ class WhisperModel(BaseModel):
         if speech_windows is None:
             logger.warning("Returning empty transcript — no speech found")
             return self._empty_result()
+
+            transcribe_input = speech_audio_path
 
         # =================================================
         # STEP 2 — WHISPER transcription
