@@ -394,7 +394,7 @@ if __name__ == "__main__":
 
         audio_files = [
             "utils/data/audio/testaudio.mp3",
-            "utils/data/audio/testaudio-vn.mp3"
+            "utils/data/audio/testaudio-vn.mp3",
         ]
 
     # =====================================================

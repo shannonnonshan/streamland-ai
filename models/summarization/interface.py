@@ -22,6 +22,9 @@ DEFAULT_CACHE_DIR = os.path.join(
     "summarization",
 )
 
+# Sentence-ending punctuation for post-processing trim
+_SENTENCE_END_RE = re.compile(r'[.!?。！？]')
+
 
 class SummarizationModel(BaseModel):
     SUPPORTED_MODELS = {
@@ -43,6 +46,10 @@ class SummarizationModel(BaseModel):
 
         self._load_model()
 
+    # =====================================================
+    # DEVICE
+    # =====================================================
+
     def _try_directml_device(self):
         try:
             torch_directml = importlib.import_module("torch_directml")
@@ -58,80 +65,68 @@ class SummarizationModel(BaseModel):
 
         if requested not in {"auto", "cpu", "cuda", "xpu", "mps", "directml"}:
             logger.warning(
-                "Invalid SUMMARIZATION_DEVICE=%s. Expected one of: auto, cpu, cuda, xpu, mps, directml. Falling back to auto.",
-                requested,
+                "Invalid SUMMARIZATION_DEVICE=%s. Falling back to auto.", requested
             )
             requested = "auto"
 
         if requested == "cpu":
-            logger.info("Summarization device selected: cpu (SUMMARIZATION_DEVICE=cpu)")
+            logger.info("Summarization device: cpu")
             return "cpu", "cpu", torch.float32, -1
 
         if requested == "directml":
             dml_device = self._try_directml_device()
             if dml_device is not None:
-                logger.info("Summarization device selected: directml")
+                logger.info("Summarization device: directml")
                 return dml_device, "directml", torch.float32, dml_device
-
-            logger.warning(
-                "SUMMARIZATION_DEVICE=directml but torch-directml is not available. Falling back to CPU."
-            )
+            logger.warning("directml unavailable, falling back to cpu")
             return "cpu", "cpu", torch.float32, -1
 
         if requested == "cuda":
             if cuda_available:
                 device_name = torch.cuda.get_device_name(0)
-                logger.info("Summarization device selected: cuda:0 (%s)", device_name)
+                logger.info("Summarization device: cuda:0 (%s)", device_name)
                 return "cuda:0", f"cuda:0 ({device_name})", torch.float16, 0
-
-            logger.warning("SUMMARIZATION_DEVICE=cuda but CUDA is not available. Falling back to CPU.")
+            logger.warning("CUDA unavailable, falling back to cpu")
             return "cpu", "cpu", torch.float32, -1
 
         if requested == "xpu":
             if xpu_available:
-                logger.info("Summarization device selected: xpu:0")
+                logger.info("Summarization device: xpu:0")
                 return "xpu:0", "xpu:0", torch.float16, "xpu:0"
-
-            logger.warning("SUMMARIZATION_DEVICE=xpu but XPU is not available. Falling back to CPU.")
+            logger.warning("XPU unavailable, falling back to cpu")
             return "cpu", "cpu", torch.float32, -1
 
         if requested == "mps":
             if mps_available:
-                logger.info("Summarization device selected: mps")
+                logger.info("Summarization device: mps")
                 return "mps", "mps", torch.float32, "mps"
-
-            logger.warning("SUMMARIZATION_DEVICE=mps but MPS is not available. Falling back to CPU.")
+            logger.warning("MPS unavailable, falling back to cpu")
             return "cpu", "cpu", torch.float32, -1
 
+        # auto
         if cuda_available:
             device_name = torch.cuda.get_device_name(0)
-            logger.info("Summarization device selected: cuda:0 (%s)", device_name)
+            logger.info("Summarization device: cuda:0 (%s)", device_name)
             return "cuda:0", f"cuda:0 ({device_name})", torch.float16, 0
-
         if xpu_available:
-            logger.info("Summarization device selected: xpu:0")
+            logger.info("Summarization device: xpu:0")
             return "xpu:0", "xpu:0", torch.float16, "xpu:0"
-
         if mps_available:
-            logger.info("Summarization device selected: mps")
+            logger.info("Summarization device: mps")
             return "mps", "mps", torch.float32, "mps"
-
         dml_device = self._try_directml_device()
         if dml_device is not None:
-            logger.info("Summarization device selected: directml")
+            logger.info("Summarization device: directml")
             return dml_device, "directml", torch.float32, dml_device
 
-        logger.info("Summarization device selected: cpu (no accelerator backend available)")
+        logger.info("Summarization device: cpu (no accelerator available)")
         return "cpu", "cpu", torch.float32, -1
 
-    # -------------------------
-    # Language detection
-    # -------------------------
+    # =====================================================
+    # LANGUAGE DETECTION
+    # =====================================================
+
     def detect_language(self, text: str) -> Optional[str]:
-        """
-        Detect language with langdetect and normalize to {'vi','en'}.
-        Returns: 'vi' or 'en', otherwise None.
-        """
         try:
             detected_lang = detect(text)
             if detected_lang.startswith("vi"):
@@ -145,73 +140,61 @@ class SummarizationModel(BaseModel):
     def _switch_model_for_language(self, language: str):
         if language not in self.SUPPORTED_MODELS:
             return False
-
         target_model = self.SUPPORTED_MODELS[language]
-
         if self.current_language == language:
             return True
-
-        # tránh reload cùng model
         if self.model_path == target_model:
             self.current_language = language
             return True
-
-        print(f"[INFO] Switching model: {self.model_path} -> {target_model}")
-
+        logger.info("Switching model: %s -> %s", self.model_path, target_model)
         self.model_path = target_model
         self._load_model()
         self.current_language = language
-
         return True
 
     @property
     def model_type(self) -> str:
         return "summarization"
 
-    # -------------------------
-    # Cache handling (safe)
-    # -------------------------
+    # =====================================================
+    # CACHE
+    # =====================================================
+
     def _clear_model_cache(self, candidate: str):
         hf_cache = os.path.join(
             os.path.expanduser("~"),
-            ".cache",
-            "huggingface",
-            "hub",
+            ".cache", "huggingface", "hub",
             f"models--{candidate.replace('/', '--')}",
         )
         if os.path.exists(hf_cache):
             shutil.rmtree(hf_cache, ignore_errors=True)
 
-    # -------------------------
-    # Load model
-    # -------------------------
+    # =====================================================
+    # LOAD MODEL
+    # =====================================================
+
     def _load_candidate(self, candidate: str, force_download: bool = False):
         candidate_lower = candidate.lower()
         is_bart_family = "bart" in candidate_lower
 
         tokenizer_kwargs = {
-            # BART repos often provide fast-tokenizer artifacts only.
-            # Keep slow tokenizer for T5/ViT5-style models.
             "use_fast": is_bart_family,
             "cache_dir": self.cache_dir,
             "force_download": force_download,
         }
-
         model_kwargs = {
             "cache_dir": self.cache_dir,
             "force_download": force_download,
-            "torch_dtype": self.torch_dtype,
+            "dtype": self.torch_dtype,
         }
-
         if HF_TOKEN:
             tokenizer_kwargs["token"] = HF_TOKEN
             model_kwargs["token"] = HF_TOKEN
 
-        # Load tokenizer with fallback for malformed tokenizer_config.json
+        # Load tokenizer with fallbacks
         try:
             tokenizer = AutoTokenizer.from_pretrained(candidate, **tokenizer_kwargs)
         except (AttributeError, TypeError) as e:
-            # Some custom mT5 repos store extra_special_tokens with wrong type (list instead of dict)
             if "'list' object has no attribute 'keys'" in str(e):
                 retry_kwargs = dict(tokenizer_kwargs)
                 retry_kwargs["extra_special_tokens"] = {}
@@ -219,7 +202,6 @@ class SummarizationModel(BaseModel):
             else:
                 raise
         except Exception:
-            # If fast tokenizer fails (missing artifacts), retry with slow tokenizer once.
             if is_bart_family and tokenizer_kwargs.get("use_fast") is True:
                 retry_kwargs = dict(tokenizer_kwargs)
                 retry_kwargs["use_fast"] = False
@@ -227,73 +209,63 @@ class SummarizationModel(BaseModel):
             else:
                 raise
 
-        # Validate tokenizer
         try:
             tokenizer.encode("test")
         except Exception:
             raise RuntimeError("Tokenizer corrupted (spiece.model issue)")
 
-        # Load model (NO resume_download)
-        model = AutoModelForSeq2SeqLM.from_pretrained(
-            candidate,
-            **model_kwargs
-        )
+        model = AutoModelForSeq2SeqLM.from_pretrained(candidate, **model_kwargs)
         model = model.to(self.device)
 
         self.tokenizer = tokenizer
         self.model = model
 
-        # Some transformers builds do not register the summarization pipeline task.
-        # Use the generic text2text-generation task so model loading stays portable.
-        pipeline_task = "text2text-generation"
+        # Pipeline — optional, ViT5/T5 only
+        if not is_bart_family:
+            try:
+                pipeline_kwargs = {
+                    "task": "text2text-generation",
+                    "model": self.model,
+                    "tokenizer": self.tokenizer,
+                }
+                if self.pipeline_device is not None:
+                    pipeline_kwargs["device"] = self.pipeline_device
+                self.summarizer = pipeline(**pipeline_kwargs)
+                self.current_pipeline_task = "text2text-generation"
+                logger.info("ViT5 pipeline initialized")
+            except Exception as e:
+                logger.warning("Pipeline unavailable (%s) — using model.generate()", e)
+                self.summarizer = None
+                self.current_pipeline_task = None
+        else:
+            self.summarizer = None
+            self.current_pipeline_task = None
 
-        # Use task that matches model family output format.
-        pipeline_kwargs = {
-            "task": pipeline_task,
-            "model": self.model,
-            "tokenizer": self.tokenizer,
-        }
-        if self.pipeline_device is not None:
-            pipeline_kwargs["device"] = self.pipeline_device
-
-        self.summarizer = pipeline(**pipeline_kwargs)
-
-        self.current_pipeline_task = pipeline_task
         self.model_path = candidate
 
     def _load_model(self):
         candidate = self.model_path
-
-        def _print_runtime():
-            print(
-                f"[INFO] Summarization runtime | device={self.device_label} | dtype={self.torch_dtype}"
-            )
-
-        # Attempt 1
         try:
             self._load_candidate(candidate, force_download=False)
-            print(f"[INFO] Loaded summarization model: {candidate}")
-            _print_runtime()
+            logger.info("Loaded: %s | device=%s | dtype=%s",
+                        candidate, self.device_label, self.torch_dtype)
             return
         except Exception as e:
-            print(f"[WARNING] First load failed: {e}")
+            logger.warning("First load failed: %s", e)
 
-        # Clear corrupted cache
-        print("[INFO] Clearing corrupted model cache...")
+        logger.info("Clearing cache for: %s", candidate)
         self._clear_model_cache(candidate)
 
-        # Attempt 2
         try:
             self._load_candidate(candidate, force_download=True)
-            print(f"[INFO] Loaded after cache reset: {candidate}")
+            logger.info("Loaded after cache reset: %s", candidate)
         except Exception as e:
             raise RuntimeError(f"Unable to load summarization model: {e}")
 
-        _print_runtime()
+    # =====================================================
+    # INFERENCE
+    # =====================================================
 
-    # -------------------------
-    # Inference
-    # -------------------------
     def process_input(self, input_data: Union[str, bytes, Any]) -> str:
         if isinstance(input_data, bytes):
             return input_data.decode("utf-8", errors="ignore")
@@ -301,34 +273,57 @@ class SummarizationModel(BaseModel):
 
     def infer(self, processed_input: str) -> Union[Dict[str, Any], bool]:
         processed_input = self._strip_instruction_wrapper(processed_input)
-
-        # Route by langdetect only:
-        # - en -> shannonnonshan/bart-summarizer
-        # - vi -> VietAI/vit5-base-vietnews-summarization
         language = self.detect_language(processed_input)
         if language is None:
             return False
-
-        # Switch to appropriate model if needed
         if not self._switch_model_for_language(language):
             return False
-
         return {"summary": self.summarize(processed_input)}
 
-    # -------------------------
-    # Summarization
-    # -------------------------
+    # =====================================================
+    # POST-PROCESS: TRIM TO COMPLETE SENTENCE
+    # =====================================================
+
+    def _trim_to_complete_sentence(self, text: str) -> str:
+        """
+        Ensure the summary ends at a sentence boundary.
+
+        Strategy:
+        1. If text already ends with sentence-ending punctuation → return as-is
+        2. Find the last sentence-ending punctuation → trim there
+        3. If no punctuation found → return original (better than empty)
+        """
+        text = text.strip()
+        if not text:
+            return text
+
+        # Already ends properly
+        if text[-1] in '.!?。！？':
+            return text
+
+        # Find last sentence-ending punctuation
+        last_match = None
+        for m in _SENTENCE_END_RE.finditer(text):
+            last_match = m
+
+        if last_match:
+            return text[:last_match.end()].strip()
+
+        # No sentence boundary found — return as-is rather than empty string
+        return text
+
+    # =====================================================
+    # HELPERS
+    # =====================================================
+
     def _looks_degenerate(self, text: str) -> bool:
         if not text:
             return True
 
         compact = re.sub(r"\s+", "", text.lower())
         if len(compact) >= 120:
-            # Detect contiguous repeated chunks, e.g. ILLARILLARILLAR...
             if re.search(r"(.{3,12})\1{6,}", compact):
                 return True
-
-            # Very low character diversity in long output is a strong bad-signal.
             if len(set(compact)) <= 10:
                 return True
 
@@ -336,7 +331,6 @@ class SummarizationModel(BaseModel):
         if len(tokens) < 12:
             return False
 
-        # Detect very repetitive outputs, e.g. ILLAR ILLAR ILLAR ...
         unique_ratio = len(set(tokens)) / max(1, len(tokens))
         if unique_ratio < 0.25:
             return True
@@ -350,29 +344,35 @@ class SummarizationModel(BaseModel):
                     max_run = run
             else:
                 run = 1
-
         return max_run >= 6
 
-    def _extractive_fallback_summary(self, source_text: str, ratio: float = 0.5) -> str:
+    def _extractive_fallback_summary(self, source_text: str, ratio: float = 0.4) -> str:
+        """
+        Extractive fallback — pick leading sentences up to ratio% of input length.
+        Works for both EN and VI since we split on universal sentence-end punctuation.
+        """
         clean_source = re.sub(r'\s+', ' ', source_text).strip()
         if not clean_source:
             return ""
 
-        target_chars = max(80, int(len(clean_source) * ratio))
+        target_chars = max(60, int(len(clean_source) * ratio))
+
+        # Split on sentence-ending punctuation (works for both EN and VI)
         sentences = re.split(r'(?<=[.!?])\s+', clean_source)
 
-        picked = []
-        total = 0
+        picked, total = [], 0
         for sent in sentences:
             s = sent.strip()
             if not s:
                 continue
+            # Stop adding if we'd exceed target and already have something
+            if total > 0 and total + len(s) > target_chars:
+                break
             picked.append(s)
             total += len(s) + 1
-            if total >= target_chars:
-                break
 
         summary = " ".join(picked).strip()
+        # Last resort: hard truncate at a sentence boundary
         if not summary:
             summary = clean_source[:target_chars].strip()
         return summary
@@ -380,11 +380,9 @@ class SummarizationModel(BaseModel):
     def _extract_summary_text(self, pipeline_output: Any) -> str:
         if not isinstance(pipeline_output, list) or not pipeline_output:
             return ""
-
         first = pipeline_output[0]
         if not isinstance(first, dict):
             return ""
-
         return (
             first.get("summary_text")
             or first.get("generated_text")
@@ -393,11 +391,9 @@ class SummarizationModel(BaseModel):
         )
 
     def _strip_instruction_wrapper(self, text: str) -> str:
-        """Remove common summarization instruction wrappers from prompt-like inputs."""
         clean_text = re.sub(r"\s+", " ", (text or "")).strip()
         if not clean_text:
             return ""
-
         english_pattern = (
             r"summarize\s+the\s+following\s+text\s+into\s+at\s+most\s+\d+\s+key\s+points,\s*"
             r"concise\s+and\s+clear,\s*preserving\s+important\s+information\.?"
@@ -406,12 +402,54 @@ class SummarizationModel(BaseModel):
             r"t[oó]m\s+t[aă]t\s+v[aă]n\s+b[aă]n\s+sau\s+th[aà]nh\s+t[oố]i\s+\d+\s+[yý]\s+ch[ií]nh,\s*"
             r"ng[aă]n\s+g[oọ]n,\s*r[oõ]\s+r[aà]ng,\s*gi[uữ]\s+th[oô]ng\s+tin\s+quan\s+tr[oọ]ng\.?"
         )
-
         clean_text = re.sub(english_pattern, " ", clean_text, flags=re.IGNORECASE)
         clean_text = re.sub(vietnamese_pattern, " ", clean_text, flags=re.IGNORECASE)
         return re.sub(r"\s+", " ", clean_text).strip()
 
-    def summarize(self, text, max_length=128, min_length=10, as_prompt=False):
+    # =====================================================
+    # GENERATE HELPER
+    # =====================================================
+
+    def _generate_with_model(
+        self,
+        prompt: str,
+        max_new_tokens: int,
+        min_new_tokens: int,
+        no_repeat_ngram_size: int = 2,
+        num_beams: int = 4,
+        repetition_penalty: float = 1.0,
+    ) -> str:
+        model_device = next(self.model.parameters()).device
+        inputs = self.tokenizer(
+            prompt,
+            return_tensors="pt",
+            truncation=True,
+            max_length=1024,
+        )
+        input_ids = inputs["input_ids"].to(model_device)
+        attention_mask = inputs["attention_mask"].to(model_device)
+
+        with torch.no_grad():
+            output_ids = self.model.generate(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_new_tokens=max_new_tokens,
+                min_new_tokens=min_new_tokens,
+                num_beams=num_beams,
+                length_penalty=2.0,
+                no_repeat_ngram_size=no_repeat_ngram_size,
+                repetition_penalty=repetition_penalty,
+                forced_eos_token_id=self.tokenizer.eos_token_id,
+                early_stopping=(num_beams > 1),  # only valid with beam search
+            )
+
+        return self.tokenizer.decode(output_ids[0], skip_special_tokens=True).strip()
+
+    # =====================================================
+    # SUMMARIZE
+    # =====================================================
+
+    def summarize(self, text, max_length=180, min_length=20, as_prompt=False):
         if not text or not str(text).strip():
             return ""
 
@@ -419,129 +457,112 @@ class SummarizationModel(BaseModel):
         if not text:
             return ""
 
-        # Keep prompt plain for seq2seq summarization models.
         prompt = text
-
-        # Keep decoding length settings simple and stable.
-        adjusted_max_length = max(32, int(max_length))
-        adjusted_min_length = min(max(10, int(min_length)), adjusted_max_length - 5)
+        adjusted_max_tokens = max(80, int(max_length))
+        adjusted_min_tokens = min(max(15, int(min_length)), adjusted_max_tokens - 10)
 
         try:
             is_bart_model = "bart" in str(self.model_path).lower()
 
             if is_bart_model:
-                # Match training/inference setup for BART to reduce generation drift.
-                model_device = next(self.model.parameters()).device
-                inputs = self.tokenizer(
+                summary = self._generate_with_model(
                     prompt,
-                    return_tensors="pt",
-                    truncation=True,
-                    max_length=512,
+                    max_new_tokens=adjusted_max_tokens,
+                    min_new_tokens=adjusted_min_tokens,
+                    no_repeat_ngram_size=3,
+                    num_beams=1,        # greedy — 4x faster on CPU
                 )
-
-                input_ids = inputs["input_ids"].to(model_device)
-                attention_mask = inputs["attention_mask"].to(model_device)
-
-                with torch.no_grad():
-                    output_ids = self.model.generate(
-                        input_ids=input_ids,
-                        attention_mask=attention_mask,
-                        max_length=adjusted_max_length,
-                        min_length=adjusted_min_length,
-                        num_beams=4,
-                        length_penalty=1.0,
-                        no_repeat_ngram_size=2,
+            else:
+                if self.summarizer is not None:
+                    gen_kwargs = {
+                        "max_new_tokens": adjusted_max_tokens,
+                        "min_new_tokens": adjusted_min_tokens,
+                        "do_sample": False,
+                        "num_beams": 1,  # greedy — faster on CPU
+                        "length_penalty": 2.0,
+                        "repetition_penalty": 1.3,
+                    }
+                    result = self.summarizer(prompt, **gen_kwargs)
+                    summary = self._extract_summary_text(result).strip()
+                else:
+                    summary = self._generate_with_model(
+                        prompt,
+                        max_new_tokens=adjusted_max_tokens,
+                        min_new_tokens=adjusted_min_tokens,
+                        no_repeat_ngram_size=3,
+                        num_beams=1,
+                        repetition_penalty=1.3,
                     )
 
-                summary = self.tokenizer.decode(output_ids[0], skip_special_tokens=True).strip()
-            else:
-                gen_kwargs = {
-                    "max_length": adjusted_max_length,
-                    "min_length": adjusted_min_length,
-                    "do_sample": False,
-                    "num_beams": 4,
-                    "early_stopping": True,
-                    "length_penalty": 1.0,
-                }
-                result = self.summarizer(prompt, **gen_kwargs)
-                summary = self._extract_summary_text(result).strip()
         except Exception as e:
-            print(f"[WARNING] Summarization failed: {e}")
+            logger.warning("Summarization failed: %s", e)
             return ""
 
-        # Final cleanup: remove any remaining sentinel tokens
+        # Cleanup
         summary = re.sub(r'<extra_id_\d+>', '', summary).strip()
-
-        # Normalize and keep only safe printable Unicode.
-        # This avoids invalid/control characters that can break display pipelines.
         summary = summary.encode("utf-8", errors="ignore").decode("utf-8", errors="ignore")
         summary = "".join(
             ch for ch in summary
             if (ch.isprintable() and not ch.isspace()) or ch in (" ", "\n", "\t")
         )
-
-        # Clean up excessive whitespace
         summary = re.sub(r'\s+', ' ', summary).strip()
 
-        # Retry once with stricter decoding when English output is clearly degenerate.
-        if self.current_language == "en" and self._looks_degenerate(summary):
+        # Trim to complete sentence
+        summary = self._trim_to_complete_sentence(summary)
+
+        # Guard: summary must be shorter than input
+        # If model just parroted the input back, fall back to extractive
+        if len(summary) >= len(prompt) * 0.9:
+            logger.warning(
+                "Summary not shorter than input (summary=%d, input=%d) — using extractive",
+                len(summary), len(prompt),
+            )
+            summary = self._extractive_fallback_summary(prompt, ratio=0.4)
+            summary = self._trim_to_complete_sentence(summary)
+
+        # Degenerate retry — all languages
+        if self._looks_degenerate(summary):
+            logger.warning("Degenerate output (lang=%s) — retrying", self.current_language)
             try:
-                retry_min_length = max(10, adjusted_min_length // 2)
+                retry_min_tokens = max(20, adjusted_min_tokens // 2)
                 is_bart_model = "bart" in str(self.model_path).lower()
 
-                if is_bart_model:
-                    model_device = next(self.model.parameters()).device
-                    inputs = self.tokenizer(
+                if is_bart_model or self.summarizer is None:
+                    retry_summary = self._generate_with_model(
                         prompt,
-                        return_tensors="pt",
-                        truncation=True,
-                        max_length=512,
+                        max_new_tokens=adjusted_max_tokens,
+                        min_new_tokens=retry_min_tokens,
+                        no_repeat_ngram_size=4,
+                        num_beams=1,
+                        repetition_penalty=1.5,
                     )
-                    input_ids = inputs["input_ids"].to(model_device)
-                    attention_mask = inputs["attention_mask"].to(model_device)
-
-                    with torch.no_grad():
-                        retry_output_ids = self.model.generate(
-                            input_ids=input_ids,
-                            attention_mask=attention_mask,
-                            max_length=adjusted_max_length,
-                            min_length=retry_min_length,
-                            num_beams=4,
-                            length_penalty=1.0,
-                            no_repeat_ngram_size=3,
-                        )
-
-                    retry_summary = self.tokenizer.decode(
-                        retry_output_ids[0], skip_special_tokens=True
-                    ).strip()
                 else:
                     retry_kwargs = {
-                        "max_length": adjusted_max_length,
-                        "min_length": retry_min_length,
+                        "max_new_tokens": adjusted_max_tokens,
+                        "min_new_tokens": retry_min_tokens,
                         "do_sample": False,
-                        "num_beams": 2,
-                        "early_stopping": True,
-                        "no_repeat_ngram_size": 3,
-                        "length_penalty": 1.1,
+                        "num_beams": 1,
+                        "no_repeat_ngram_size": 4,
+                        "repetition_penalty": 1.5,
+                        "length_penalty": 2.0,
                     }
                     retry_result = self.summarizer(prompt, **retry_kwargs)
                     retry_summary = self._extract_summary_text(retry_result).strip()
 
                 retry_summary = re.sub(r'<extra_id_\d+>', '', retry_summary).strip()
-                retry_summary = ''.join(
-                    char for char in retry_summary
-                    if ((char.isprintable() or char in '\n\t') and ord(char) > 31) or char.isspace()
-                )
                 retry_summary = re.sub(r'\s+', ' ', retry_summary).strip()
+                retry_summary = self._trim_to_complete_sentence(retry_summary)
+
                 if retry_summary and not self._looks_degenerate(retry_summary):
                     summary = retry_summary
+
             except Exception:
-                # Keep the original summary if fallback decode fails.
                 pass
 
-        # Final guardrail for English model: if output is still repetitive/garbled,
-        # return a safe extractive summary from the original text.
-        if self.current_language == "en" and self._looks_degenerate(summary):
-            summary = self._extractive_fallback_summary(text, ratio=0.5)
+        # Final guardrail: extractive fallback for both languages
+        if self._looks_degenerate(summary):
+            logger.warning("Falling back to extractive summary (lang=%s)", self.current_language)
+            summary = self._extractive_fallback_summary(text, ratio=0.4)
+            summary = self._trim_to_complete_sentence(summary)
 
         return summary
