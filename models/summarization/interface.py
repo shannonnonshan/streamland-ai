@@ -185,7 +185,7 @@ class SummarizationModel(BaseModel):
         model_kwargs = {
             "cache_dir": self.cache_dir,
             "force_download": force_download,
-            "dtype": self.torch_dtype,
+            "torch_dtype": self.torch_dtype,
         }
         if HF_TOKEN:
             tokenizer_kwargs["token"] = HF_TOKEN

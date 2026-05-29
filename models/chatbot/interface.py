@@ -83,7 +83,7 @@ class ChatbotModel(BaseModel):
             "CHATBOT_BASE_MODEL",
             "unsloth/Qwen2.5-7B-Instruct-bnb-4bit",
         )
-        use_unsloth = os.getenv("CHATBOT_USE_UNSLOTH", "true").lower() == "true"
+        use_unsloth = os.getenv("CHATBOT_USE_UNSLOTH", "false").lower() == "true"
         max_seq_length = int(os.getenv("CHATBOT_MAX_SEQ_LENGTH", "2048"))
         load_in_4bit = os.getenv("CHATBOT_LOAD_IN_4BIT", "false").lower() == "true"
 
