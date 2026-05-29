@@ -7,11 +7,11 @@ import logging
 import os
 import tempfile
 import time
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
-from fastapi import APIRouter, File, UploadFile, Form
+import httpx
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
-from fastapi import HTTPException
 
 from api.dependencies import get_whisper_model
 
@@ -27,17 +27,11 @@ _cache_lock = asyncio.Lock()
 
 
 async def _get_or_create_temp_file(file_content: bytes, original_filename: str) -> str:
-    """
-    Get cached temp file if content already exists, otherwise create new temp file.
-    Returns: path to temp file
-    """
-    # Calculate content hash
     content_hash = hashlib.sha256(file_content).hexdigest()
 
     async with _cache_lock:
         now = time.time()
 
-        # Clean expired cache entries
         expired_hashes = [
             h
             for h, (_, timestamp) in _temp_file_cache.items()
@@ -52,14 +46,12 @@ async def _get_or_create_temp_file(file_content: bytes, original_filename: str) 
             except Exception as e:
                 logger.warning("Failed to clean expired temp file %s: %s", path, e)
 
-        # Check if we have this content cached
         if content_hash in _temp_file_cache:
             file_path, _ = _temp_file_cache[content_hash]
             if os.path.exists(file_path):
                 logger.info("Reusing cached temp file for hash %s: %s", content_hash[:8], file_path)
                 return file_path
 
-        # Create new temp file
         _, ext = os.path.splitext(original_filename or "")
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=ext or ".wav")
         temp_file.write(file_content)
@@ -73,21 +65,45 @@ async def _get_or_create_temp_file(file_content: bytes, original_filename: str) 
 
 
 @router.post("")
-async def transcribe(file: UploadFile = File(...), language: str = Form("")):
-    """Transcribe audio file using the local Whisper model."""
-    temp_path = None
+async def transcribe(
+    file: Optional[UploadFile] = File(None),
+    file_url: str = Form(""),
+    language: str = Form(""),
+):
+    """Transcribe audio file using the local Whisper model. Accepts file_url or uploaded file."""
 
     async def generate():
-        nonlocal temp_path
         try:
-            # Read file content
-            file_content = await file.read()
-            file_size_bytes = len(file_content)
+            # Priority 1: download from URL
+            if file_url:
+                logger.info("Downloading audio from URL: %s", file_url)
+                async with httpx.AsyncClient(timeout=300) as client:
+                    response = await client.get(file_url)
+                    if response.status_code != 200:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Failed to download file from URL: HTTP {response.status_code}",
+                        )
+                    file_content = response.content
+                    filename = file_url.split("?")[0].split("/")[-1] or "audio.wav"
+                logger.info("Downloaded %d bytes from URL", len(file_content))
 
+            # Priority 2: uploaded file
+            elif file is not None:
+                file_content = await file.read()
+                filename = file.filename or "audio.wav"
+                logger.info("Received uploaded file: %s, %d bytes", filename, len(file_content))
+
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Either file_url or file is required",
+                )
+
+            file_size_bytes = len(file_content)
             logger.info(
-                "Transcribe request received: filename=%s, content_type=%s, size=%d bytes",
-                file.filename,
-                file.content_type,
+                "Transcribe request ready: filename=%s, size=%d bytes",
+                filename,
                 file_size_bytes,
             )
 
@@ -95,7 +111,7 @@ async def transcribe(file: UploadFile = File(...), language: str = Form("")):
                 json.dumps(
                     {
                         "status": "processing",
-                        "filename": file.filename,
+                        "filename": filename,
                         "message": "Starting transcription...",
                         "processing": True,
                     }
@@ -103,17 +119,13 @@ async def transcribe(file: UploadFile = File(...), language: str = Form("")):
                 + b"\n"
             )
 
-            # Get or create cached temp file
-            temp_path = await _get_or_create_temp_file(file_content, file.filename)
-
+            temp_path = await _get_or_create_temp_file(file_content, filename)
             logger.info("Using temp file: %s, starting transcription...", temp_path)
 
             started_at = time.monotonic()
-
             model = get_whisper_model()
             transcribe_task = asyncio.create_task(asyncio.to_thread(model.transcribe, temp_path))
 
-            # Keep streaming heartbeat messages while waiting for final result.
             while not transcribe_task.done():
                 await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
                 if transcribe_task.done():
@@ -124,7 +136,7 @@ async def transcribe(file: UploadFile = File(...), language: str = Form("")):
                     json.dumps(
                         {
                             "status": "processing",
-                            "filename": file.filename,
+                            "filename": filename,
                             "message": "Transcription still running...",
                             "processing": True,
                             "elapsed_seconds": elapsed_seconds,
@@ -134,32 +146,36 @@ async def transcribe(file: UploadFile = File(...), language: str = Form("")):
                 )
 
             result = await transcribe_task
-            logger.info("Transcribe completed: filename=%s", file.filename)
+            logger.info("Transcribe completed: filename=%s", filename)
 
-            response_data = {
-                "status": "success",
-                "data": {
-                    "filename": file.filename,
-                    "result": result,
-                },
-                "error": None,
-            }
-            yield json.dumps(response_data).encode() + b"\n"
+            yield (
+                json.dumps(
+                    {
+                        "status": "success",
+                        "data": {
+                            "filename": filename,
+                            "result": result,
+                        },
+                        "error": None,
+                    }
+                ).encode()
+                + b"\n"
+            )
 
         except asyncio.CancelledError:
-            logger.info("Transcribe stream cancelled by client: filename=%s", file.filename)
+            logger.info("Transcribe stream cancelled by client")
             raise
         except Exception as e:
-            logger.exception("Transcribe failed: filename=%s", file.filename)
-            error_response = {
-                "status": "error",
-                "data": None,
-                "error": str(e),
-            }
-            yield json.dumps(error_response).encode() + b"\n"
-        finally:
-            # Note: temp files are NOT deleted here, they are kept in cache for reuse
-            # and will be cleaned by TTL expiration logic
-            pass
+            logger.exception("Transcribe failed")
+            yield (
+                json.dumps(
+                    {
+                        "status": "error",
+                        "data": None,
+                        "error": str(e),
+                    }
+                ).encode()
+                + b"\n"
+            )
 
     return StreamingResponse(generate(), media_type="application/x-ndjson")
