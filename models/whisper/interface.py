@@ -27,11 +27,9 @@ SENTENCE_END_RE = re.compile(
 
 MAX_TIMESTAMP_SEGMENT_SEC = 5.0
 
-# Minimum transcript quality gates
 MIN_TRANSCRIPT_WORDS = 5
 MIN_TRANSCRIPT_CHARS = 20
 
-# Languages Whisper is allowed to return
 ALLOWED_LANGUAGES = {"vi", "en"}
 FALLBACK_LANGUAGE = "en"
 
@@ -57,26 +55,12 @@ HALLUCINATION_PATTERNS = [
 
 class WhisperModel(BaseModel):
 
-    def __init__(
-        self,
-        model_path: str,
-        from_hf: bool = False
-    ):
-        super().__init__(
-            model_path=model_path,
-            from_hf=from_hf
-        )
-
-        (
-            self.device,
-            self.device_label,
-            self.compute_type,
-        ) = self._resolve_device()
-
+    def __init__(self, model_path: str, from_hf: bool = False):
+        super().__init__(model_path=model_path, from_hf=from_hf)
+        self.device, self.device_label, self.compute_type = self._resolve_device()
         self.vad_model = None
         self.get_speech_timestamps = None
         self.read_audio = None
-
         self._load_model()
         self._load_vad()
 
@@ -85,16 +69,10 @@ class WhisperModel(BaseModel):
     # =====================================================
 
     def _resolve_device(self):
-
-        requested = os.getenv(
-            "WHISPER_DEVICE", "auto"
-        ).strip().lower()
-
+        requested = os.getenv("WHISPER_DEVICE", "auto").strip().lower()
         cuda_available = torch.cuda.is_available()
 
-        if requested not in {
-            "auto", "cpu", "cuda", "xpu", "mps", "directml"
-        }:
+        if requested not in {"auto", "cpu", "cuda", "xpu", "mps", "directml"}:
             logger.warning("Invalid WHISPER_DEVICE=%s", requested)
             requested = "auto"
 
@@ -106,11 +84,7 @@ class WhisperModel(BaseModel):
             if cuda_available:
                 device_name = torch.cuda.get_device_name(0)
                 logger.info("Whisper device: cuda (%s)", device_name)
-                return (
-                    "cuda",
-                    f"cuda ({device_name})",
-                    self._resolve_compute_type("cuda"),
-                )
+                return ("cuda", f"cuda ({device_name})", self._resolve_compute_type("cuda"))
             logger.warning("CUDA requested but unavailable")
             return ("cpu", "cpu", self._resolve_compute_type("cpu"))
 
@@ -122,11 +96,7 @@ class WhisperModel(BaseModel):
         if cuda_available:
             device_name = torch.cuda.get_device_name(0)
             logger.info("Whisper device: cuda (%s)", device_name)
-            return (
-                "cuda",
-                f"cuda ({device_name})",
-                self._resolve_compute_type("cuda"),
-            )
+            return ("cuda", f"cuda ({device_name})", self._resolve_compute_type("cuda"))
 
         logger.info("Whisper device: cpu")
         return ("cpu", "cpu", self._resolve_compute_type("cpu"))
@@ -157,9 +127,7 @@ class WhisperModel(BaseModel):
         )
         logger.info(
             "Loaded faster-whisper: %s | device=%s | compute_type=%s",
-            self.model_path,
-            self.device_label,
-            self.compute_type,
+            self.model_path, self.device_label, self.compute_type,
         )
 
     # =====================================================
@@ -168,11 +136,10 @@ class WhisperModel(BaseModel):
 
     def _load_vad(self):
         logger.info("Loading Silero VAD...")
-        try:           
+        try:
             self.vad_model = load_silero_vad()
             self.get_speech_timestamps = _get_ts
             logger.info("Silero VAD loaded via silero-vad package")
-
         except ImportError:
             logger.warning("silero-vad package not found, falling back to torch.hub")
             self.vad_model, utils = torch.hub.load(
@@ -187,10 +154,7 @@ class WhisperModel(BaseModel):
     # INPUT
     # =====================================================
 
-    def process_input(
-        self,
-        input_data: Union[str, np.ndarray]
-    ) -> Union[str, np.ndarray]:
+    def process_input(self, input_data: Union[str, np.ndarray]) -> Union[str, np.ndarray]:
         if isinstance(input_data, (str, np.ndarray)):
             return input_data
         raise TypeError(f"Invalid input type: {type(input_data)}")
@@ -203,33 +167,15 @@ class WhisperModel(BaseModel):
         return " ".join(text.split()).strip()
 
     # =====================================================
-    # SPEECH-ONLY EXTRACTION (timestamp-preserving)
-    #
-    # Enhancement: instead of stitching chunks and losing
-    # real-time offsets, we return the VAD speech timestamps
-    # so Whisper receives the original audio with correct
-    # start/end positions. We write a stitched wav only as
-    # fallback for Whisper input — offsets are corrected
-    # after transcription using the timestamp map.
+    # SPEECH-ONLY EXTRACTION
     # =====================================================
 
     def _extract_speech_only(
         self,
         audio_path: str,
         output_path: str,
-        threshold: float = 0.5,
+        threshold: float = 0.3,  # FIX: giảm từ 0.5 → 0.3
     ) -> Optional[List[Dict[str, float]]]:
-        """
-        Returns a list of VAD speech windows (in seconds):
-            [{"start": 1.2, "end": 4.5}, ...]
-        or None if no speech found.
-
-        Also writes a stitched speech-only wav to output_path
-        for Whisper input, and stores a cumulative offset map
-        so post-transcription timestamps can be corrected back
-        to original audio time.
-        """
-
         wav, _ = librosa.load(audio_path, sr=16000, mono=True)
         wav_tensor = torch.from_numpy(wav)
 
@@ -237,8 +183,8 @@ class WhisperModel(BaseModel):
             wav_tensor,
             self.vad_model,
             threshold=threshold,
-            min_speech_duration_ms=500,
-            min_silence_duration_ms=300,
+            min_speech_duration_ms=200,   # FIX: giảm từ 500 → 200
+            min_silence_duration_ms=200,  # FIX: giảm từ 300 → 200
             sampling_rate=16000,
         )
 
@@ -246,8 +192,6 @@ class WhisperModel(BaseModel):
             logger.warning("No speech detected in: %s", audio_path)
             return None
 
-        # Build stitched audio + offset correction map
-        # offset_map: list of (stitched_start_sec, original_start_sec)
         chunks = []
         offset_map = []
         stitched_cursor = 0.0
@@ -267,7 +211,6 @@ class WhisperModel(BaseModel):
         stitched = np.concatenate(chunks)
         sf.write(output_path, stitched, 16000)
 
-        # Store offset map for timestamp correction in infer()
         self._vad_offset_map = offset_map
 
         logger.info(
@@ -278,33 +221,27 @@ class WhisperModel(BaseModel):
         )
 
         return [
-            {
-                "start": ts["start"] / 16000,
-                "end": ts["end"] / 16000,
-            }
+            {"start": ts["start"] / 16000, "end": ts["end"] / 16000}
             for ts in speech_timestamps
         ]
 
     # =====================================================
-    # CORRECT WHISPER TIMESTAMP → ORIGINAL AUDIO TIME
+    # CORRECT TIMESTAMP — FIX: duyệt xuôi, tìm đúng block
     # =====================================================
 
     def _correct_timestamp(self, stitched_sec: float) -> float:
-        """
-        Map a timestamp from stitched speech-only audio back
-        to the original audio timeline using the VAD offset map.
-        """
         if not hasattr(self, "_vad_offset_map"):
             return stitched_sec
 
         corrected = stitched_sec
-        for stitched_start, original_start in reversed(
-            self._vad_offset_map
-        ):
-            if stitched_sec >= stitched_start:
-                corrected = original_start + (
-                    stitched_sec - stitched_start
-                )
+        for i, (stitched_start, original_start) in enumerate(self._vad_offset_map):
+            if i + 1 < len(self._vad_offset_map):
+                stitched_end = self._vad_offset_map[i + 1][0]
+            else:
+                stitched_end = float("inf")
+
+            if stitched_start <= stitched_sec < stitched_end:
+                corrected = original_start + (stitched_sec - stitched_start)
                 break
 
         return corrected
@@ -314,19 +251,12 @@ class WhisperModel(BaseModel):
     # =====================================================
 
     def _validate_language(self, detected: str) -> str:
-        """
-        Normalise and gate the detected language.
-        Falls back to FALLBACK_LANGUAGE if unexpected.
-        """
         lang = (detected or "").strip().lower()
-
         if lang in ALLOWED_LANGUAGES:
             return lang
-
         logger.warning(
             "Unexpected language detected: '%s' → falling back to '%s'",
-            lang,
-            FALLBACK_LANGUAGE,
+            lang, FALLBACK_LANGUAGE,
         )
         return FALLBACK_LANGUAGE
 
@@ -339,44 +269,24 @@ class WhisperModel(BaseModel):
         full_text: str,
         segments: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        """
-        Gate on minimum quality before returning.
-        Returns a validation result dict.
-        """
         word_count = len(full_text.split())
         char_count = len(full_text)
         seg_count = len(segments)
-
         issues = []
 
         if word_count < MIN_TRANSCRIPT_WORDS:
-            issues.append(
-                f"too short: {word_count} words "
-                f"(min {MIN_TRANSCRIPT_WORDS})"
-            )
-
+            issues.append(f"too short: {word_count} words (min {MIN_TRANSCRIPT_WORDS})")
         if char_count < MIN_TRANSCRIPT_CHARS:
-            issues.append(
-                f"too few chars: {char_count} "
-                f"(min {MIN_TRANSCRIPT_CHARS})"
-            )
-
+            issues.append(f"too few chars: {char_count} (min {MIN_TRANSCRIPT_CHARS})")
         if seg_count == 0:
             issues.append("no valid segments survived filtering")
 
         valid = len(issues) == 0
 
         if not valid:
-            logger.warning(
-                "Transcript quality check failed: %s",
-                "; ".join(issues),
-            )
+            logger.warning("Transcript quality check failed: %s", "; ".join(issues))
         else:
-            logger.info(
-                "Transcript quality OK — %d words, %d segments",
-                word_count,
-                seg_count,
-            )
+            logger.info("Transcript quality OK — %d words, %d segments", word_count, seg_count)
 
         return {
             "valid": valid,
@@ -386,7 +296,7 @@ class WhisperModel(BaseModel):
         }
 
     # =====================================================
-    # SEGMENT CLEANUP
+    # SEGMENT CLEANUP — FIX: giảm filter từ <= 2 → <= 1
     # =====================================================
 
     def _is_valid_segment(
@@ -395,35 +305,24 @@ class WhisperModel(BaseModel):
         segment: Any,
         previous_text: Optional[str],
     ) -> bool:
-        """Single responsibility: decide if a segment passes all filters."""
-
-        # Too short
-        if len(text.split()) <= 2:
+        if len(text.split()) <= 1:  # FIX: từ <= 2 → <= 1
             return False
 
-        # Low speech confidence
-        if (
-            hasattr(segment, "no_speech_prob")
-            and segment.no_speech_prob > 0.5
-        ):
+        if hasattr(segment, "no_speech_prob") and segment.no_speech_prob > 0.5:
             return False
 
         lower = text.lower()
 
-        # Music / noise markers
         if any(kw in lower for kw in MUSIC_KEYWORDS):
             return False
 
-        # Known hallucination phrases
         if any(p in lower for p in HALLUCINATION_PATTERNS):
             return False
 
-        # Suspiciously fast (many words, very short window)
         duration = float(segment.end) - float(segment.start)
         if duration < 1.0 and len(text.split()) > 6:
             return False
 
-        # Exact duplicate of previous segment
         if previous_text is not None and previous_text == lower:
             return False
 
@@ -433,11 +332,7 @@ class WhisperModel(BaseModel):
     # SENTENCE SEGMENTS
     # =====================================================
 
-    def _segments_to_sentences(
-        self,
-        segments: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
-
+    def _segments_to_sentences(self, segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         sentences = []
         current_parts = []
         current_start = None
@@ -458,22 +353,17 @@ class WhisperModel(BaseModel):
                 sentences.append({
                     "start": round(current_start, 2),
                     "end": round(current_end, 2),
-                    "text": self._normalize_text(
-                        " ".join(current_parts)
-                    ),
+                    "text": self._normalize_text(" ".join(current_parts)),
                 })
                 current_parts = []
                 current_start = None
                 current_end = None
 
-        # Flush remaining
         if current_parts and current_start is not None:
             sentences.append({
                 "start": round(current_start, 2),
                 "end": round(current_end, 2),
-                "text": self._normalize_text(
-                    " ".join(current_parts)
-                ),
+                "text": self._normalize_text(" ".join(current_parts)),
             })
 
         return sentences
@@ -482,11 +372,7 @@ class WhisperModel(BaseModel):
     # TIMESTAMPS
     # =====================================================
 
-    def _to_timestamps(
-        self,
-        segments: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
-
+    def _to_timestamps(self, segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         sentences = self._segments_to_sentences(segments)
         timestamps = []
 
@@ -500,22 +386,11 @@ class WhisperModel(BaseModel):
             duration = max(0.0, end - start)
 
             if duration <= MAX_TIMESTAMP_SEGMENT_SEC:
-                timestamps.append({
-                    "start": round(start, 2),
-                    "text": text,
-                })
+                timestamps.append({"start": round(start, 2), "text": text})
                 continue
 
-            # Split long segments proportionally
             words = text.split()
-            chunk_count = max(
-                1,
-                min(
-                    int(np.ceil(duration / MAX_TIMESTAMP_SEGMENT_SEC)),
-                    len(words),
-                ),
-            )
-
+            chunk_count = max(1, min(int(np.ceil(duration / MAX_TIMESTAMP_SEGMENT_SEC)), len(words)))
             base_size = len(words) // chunk_count
             remainder = len(words) % chunk_count
             index = 0
@@ -532,10 +407,7 @@ class WhisperModel(BaseModel):
                     continue
 
                 chunk_start = start + duration * (i / chunk_count)
-                timestamps.append({
-                    "start": round(chunk_start, 2),
-                    "text": " ".join(chunk_words),
-                })
+                timestamps.append({"start": round(chunk_start, 2), "text": " ".join(chunk_words)})
 
         return timestamps
 
@@ -543,68 +415,41 @@ class WhisperModel(BaseModel):
     # INFER
     # =====================================================
 
-    def infer(
-        self,
-        processed_input: Union[str, np.ndarray]
-    ) -> Dict[str, Any]:
+    def infer(self, processed_input: Union[str, np.ndarray]) -> Dict[str, Any]:
 
-        # =================================================
-        # STEP 1 — VAD: extract speech-only audio
-        # =================================================
-
+        # STEP 1 — VAD
         base = os.path.splitext(processed_input)[0]
         speech_audio_path = f"{base}.speech.wav"
 
-        speech_windows = self._extract_speech_only(
-            processed_input,
-            speech_audio_path,
-        )
+        speech_windows = self._extract_speech_only(processed_input, speech_audio_path)
 
         if speech_windows is None:
             logger.warning("Returning empty transcript — no speech found")
             return self._empty_result()
 
-
-        # =================================================
-        # STEP 2 — WHISPER transcription
-        # =================================================
-
+        # STEP 2 — WHISPER
         segments_gen, info = self.model.transcribe(
             speech_audio_path,
-            beam_size=3,
-            vad_filter=False,       # VAD already done above
+            beam_size=5,        # FIX: tăng từ 3 → 5 để chính xác hơn
+            vad_filter=False,
         )
 
-        # =================================================
-        # STEP 3 — LANGUAGE VALIDATION
-        # =================================================
+        # STEP 3 — LANGUAGE
+        detected_lang = self._validate_language(getattr(info, "language", None) or "")
 
-        detected_lang = self._validate_language(
-            getattr(info, "language", None) or ""
-        )
-
-        # =================================================
         # STEP 4 — SEGMENT CLEANUP
-        # =================================================
-
         segment_items: List[Dict[str, Any]] = []
         text_parts: List[str] = []
         previous_lower: Optional[str] = None
 
         for segment in segments_gen:
-
             text = self._normalize_text(segment.text)
 
             if not self._is_valid_segment(text, segment, previous_lower):
                 continue
 
-            # Correct timestamps back to original audio time
-            original_start = self._correct_timestamp(
-                float(segment.start)
-            )
-            original_end = self._correct_timestamp(
-                float(segment.end)
-            )
+            original_start = self._correct_timestamp(float(segment.start))
+            original_end = self._correct_timestamp(float(segment.end))
 
             item = {
                 "start": round(original_start, 2),
@@ -616,33 +461,21 @@ class WhisperModel(BaseModel):
             text_parts.append(text)
             previous_lower = text.lower()
 
-        # =================================================
-        # STEP 5 — CLEANUP temp file
-        # =================================================
-
+        # STEP 5 — CLEANUP
         try:
             os.remove(speech_audio_path)
         except Exception:
             pass
 
-        # =================================================
-        # STEP 6 — TRANSCRIPT QUALITY VALIDATION
-        # =================================================
-
+        # STEP 6 — QUALITY CHECK
         full_text = " ".join(text_parts).strip()
-
         quality = self._validate_transcript(full_text, segment_items)
 
         if not quality["valid"]:
-            logger.warning(
-                "Transcript failed quality gate — returning empty result"
-            )
+            logger.warning("Transcript failed quality gate — returning empty result")
             return self._empty_result(quality=quality)
 
-        # =================================================
         # STEP 7 — RETURN
-        # =================================================
-
         return {
             "text": full_text,
             "language": detected_lang,
@@ -655,10 +488,7 @@ class WhisperModel(BaseModel):
     # EMPTY RESULT
     # =====================================================
 
-    def _empty_result(
-        self,
-        quality: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+    def _empty_result(self, quality: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         return {
             "text": "",
             "language": FALLBACK_LANGUAGE,
