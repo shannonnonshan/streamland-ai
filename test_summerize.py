@@ -118,7 +118,7 @@ class TestSummarizationInference(unittest.TestCase):
         self.model.infer(LONG_ENGLISH_TEXT)
         self.assertIn("bart", self.model.model_path.lower())
 
-    # Vietnamese
+    # Vietnamese tests
 
     def test_vietnamese_inference_returns_valid_summary(self):
         result = self.model.infer(LONG_VIETNAMESE_TEXT)

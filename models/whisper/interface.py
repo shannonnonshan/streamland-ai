@@ -169,12 +169,13 @@ class WhisperModel(BaseModel):
     # =====================================================
     # SPEECH-ONLY EXTRACTION
     # =====================================================
+    SPEECH_PADDING_SAMPLES = int(0.2 * 16000)  # 200ms padding before each speech chunk
 
     def _extract_speech_only(
         self,
         audio_path: str,
         output_path: str,
-        threshold: float = 0.3,  # FIX: giảm từ 0.5 → 0.3
+        threshold: float = 0.3,
     ) -> Optional[List[Dict[str, float]]]:
         wav, _ = librosa.load(audio_path, sr=16000, mono=True)
         wav_tensor = torch.from_numpy(wav)
@@ -183,8 +184,8 @@ class WhisperModel(BaseModel):
             wav_tensor,
             self.vad_model,
             threshold=threshold,
-            min_speech_duration_ms=200,   # FIX: giảm từ 500 → 200
-            min_silence_duration_ms=200,  # FIX: giảm từ 300 → 200
+            min_speech_duration_ms=200,
+            min_silence_duration_ms=200,
             sampling_rate=16000,
         )
 
@@ -200,10 +201,15 @@ class WhisperModel(BaseModel):
             start_sample = ts["start"]
             end_sample = ts["end"]
 
-            chunk = wav[start_sample:end_sample]
+            # Pad start backward to preserve a little silence before speech.
+            # This gives faster-whisper enough context to align timestamps correctly,
+            # preventing subtitles from appearing slightly ahead of the audio.
+            padded_start = max(0, start_sample - self.SPEECH_PADDING_SAMPLES)
+
+            chunk = wav[padded_start:end_sample]
             chunks.append(chunk)
 
-            original_start_sec = start_sample / 16000
+            original_start_sec = padded_start / 16000
             offset_map.append((stitched_cursor, original_start_sec))
 
             stitched_cursor += len(chunk) / 16000
@@ -224,7 +230,7 @@ class WhisperModel(BaseModel):
             {"start": ts["start"] / 16000, "end": ts["end"] / 16000}
             for ts in speech_timestamps
         ]
-
+    
     # =====================================================
     # CORRECT TIMESTAMP — FIX: duyệt xuôi, tìm đúng block
     # =====================================================

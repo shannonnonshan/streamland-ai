@@ -24,7 +24,10 @@ DEFAULT_CACHE_DIR = os.path.join(
 
 # Sentence-ending punctuation for post-processing trim
 _SENTENCE_END_RE = re.compile(r'[.!?。！？]')
-
+_VI_CHAR_RE = re.compile(
+    r'[àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđ'
+    r'ÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÈÉẺẼẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴĐ]'
+)
 
 class SummarizationModel(BaseModel):
     SUPPORTED_MODELS = {
@@ -126,16 +129,35 @@ class SummarizationModel(BaseModel):
     # LANGUAGE DETECTION
     # =====================================================
 
-    def detect_language(self, text: str) -> Optional[str]:
+    def detect_language(self, text: str) -> str:
+        """
+        Detect whether text is Vietnamese or English.
+        Never returns None — defaults to 'en' if uncertain.
+        """
         try:
-            detected_lang = detect(text)
-            if detected_lang.startswith("vi"):
+            detected = detect(text)
+            if detected.startswith("vi"):
                 return "vi"
-            if detected_lang.startswith("en"):
+            if detected.startswith("en"):
                 return "en"
-            return None
-        except LangDetectException:
-            return None
+            logger.warning(
+                "langdetect returned unsupported language '%s' (len=%d) — trying heuristic",
+                detected, len(text),
+            )
+        except LangDetectException as e:
+            logger.warning("langdetect failed: %s — trying heuristic", e)
+        vi_chars = len(_VI_CHAR_RE.findall(text))
+        ratio = vi_chars / max(1, len(text))
+        logger.info(
+            "Language heuristic: vi_char_ratio=%.3f (vi=%d, total=%d)",
+            ratio, vi_chars, len(text),
+        )
+        if ratio > 0.05:
+            return "vi"
+
+        logger.info("Language defaulting to 'en'")
+        return "en"
+
 
     def _switch_model_for_language(self, language: str):
         if language not in self.SUPPORTED_MODELS:

@@ -160,7 +160,7 @@ def test_moderation(rewrite: bool = False) -> None:
                 try:
                     result = response.json()
                     
-                    # Debug: print full response on first test (with Vietnamese support)
+                    # Debug: print the full response on the first test.
                     if idx == 1:
                         print(f"[DEBUG] Full response structure:")
                         print(json.dumps(result, indent=2, ensure_ascii=False)[:800])

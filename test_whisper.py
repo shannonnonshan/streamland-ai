@@ -181,7 +181,7 @@ if __name__ == "__main__":
 
     audio_url = os.getenv(
         "TEST_AUDIO_URL",
-        "https://pub-6ec835ecee45466fa5552dedffaee2e4.r2.dev/streamland-bucket-video/audio-export/00fd345f-3a7f-44c6-b044-12c9b9a3d7ec.wav"
+        "https://pub-6ec835ecee45466fa5552dedffaee2e4.r2.dev/audio-export/75753de3-b366-4ba5-88ae-32fca5862ba1.wav"
     )
 
     if audio_url:
