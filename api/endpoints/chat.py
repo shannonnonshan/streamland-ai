@@ -1,7 +1,8 @@
 """Chat endpoint using chatbot model + search index."""
 
 import asyncio
-from typing import List, Optional
+import random
+from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
@@ -76,7 +77,50 @@ def _format_doc(meta: dict) -> str:
     return snippet
 
 
-def retrieve(query: str, embeddings_model, exclude_ids: Optional[List[str]], top_k: int):
+def _unique_shuffle(items: List[str]) -> List[str]:
+    unique_items = list(dict.fromkeys(item for item in items if item and str(item).strip()))
+    random.shuffle(unique_items)
+    return unique_items
+
+
+def generate_video_suggestions(video_item: dict, fallback_query: str = "") -> List[str]:
+    suggestions: List[str] = []
+
+    video_id = str(video_item.get("id", "")).strip()
+    teacher_name = str(video_item.get("teacher_name") or video_item.get("teacher") or "").strip()
+    title = str(video_item.get("title") or "").strip()
+    title_words = title.split()
+    category = str(video_item.get("category") or "").strip()
+    tags = list(video_item.get("tags") or [])
+
+    if video_id:
+        suggestions.append(f"Summarize this video {video_id}")
+        suggestions.append(f"What is the description of this video {video_id}?")
+
+    if teacher_name and teacher_name != "N/A":
+        suggestions.append(f"Recommend more videos by {teacher_name}")
+        suggestions.append(f"Who is {teacher_name}?")
+
+    if category and category != "N/A":
+        suggestions.append(f"Recommend more videos about {category}")
+        suggestions.append(f"Explain {category} in simple terms.")
+
+    if tags:
+        random.shuffle(tags)
+        for tag in tags[:3]:
+            suggestions.append(f"Recommend more videos about {tag}")
+
+    if title_words:
+        suggestions.append(f"What is {random.choice(title_words)}?")
+
+    if fallback_query.strip():
+        suggestions.append(f"Recommend more videos related to {fallback_query.strip()}")
+
+    suggestions.append("Recommend more videos in general")
+    return _unique_shuffle(suggestions)
+
+
+def retrieve(query: str, embeddings_model, exclude_ids: Optional[List[str]], top_k: int) -> Tuple[List[str], List[str], List[dict]]:
     embedding = embeddings_model.embed(query)[0]
     candidate_k = max(top_k * 5, top_k)
     results = search_index.search(embedding, candidate_k)
@@ -84,6 +128,7 @@ def retrieve(query: str, embeddings_model, exclude_ids: Optional[List[str]], top
     exclude_set = set(exclude_ids or [])
     docs: List[str] = []
     new_ids: List[str] = []
+    metas: List[dict] = []
 
     for item in results:
         meta = item.get("metadata", {})
@@ -95,15 +140,16 @@ def retrieve(query: str, embeddings_model, exclude_ids: Optional[List[str]], top
             continue
         docs.append(formatted)
         new_ids.append(item_id)
+        metas.append(meta)
         if len(docs) >= top_k:
             break
 
-    return docs, new_ids
+    return docs, new_ids, metas
 
 
 def build_chat_prompt(q: str, history: List[ChatMessage], embeddings_model, exclude_ids: List[str], top_k: int):
     convo = _format_history(history)
-    retrieved_docs, new_ids = retrieve(q, embeddings_model, exclude_ids, top_k)
+    retrieved_docs, new_ids, retrieved_meta = retrieve(q, embeddings_model, exclude_ids, top_k)
 
     if not retrieved_docs:
         ctx = (
@@ -121,7 +167,7 @@ def build_chat_prompt(q: str, history: List[ChatMessage], embeddings_model, excl
         f"User: {q}\nAssistant:"
     )
 
-    return prompt, new_ids
+    return prompt, new_ids, retrieved_meta
 
 
 @router.post("")
@@ -135,8 +181,9 @@ async def chat(
         if is_definition_query(request.message):
             prompt = build_dictionary_prompt(request.message)
             new_ids: List[str] = []
+            retrieved_meta: List[dict] = []
         else:
-            prompt, new_ids = build_chat_prompt(
+            prompt, new_ids, retrieved_meta = build_chat_prompt(
                 request.message,
                 request.history,
                 embeddings_model,
@@ -145,12 +192,19 @@ async def chat(
             )
 
         response = await asyncio.to_thread(model.generate, prompt)
+        suggestions: List[str] = []
+        if retrieved_meta:
+            for item in retrieved_meta[:3]:
+                suggestions.extend(generate_video_suggestions(item, request.message))
+        else:
+            suggestions = generate_video_suggestions({"title": request.message}, request.message)
 
         return {
             "status": "success",
             "message": request.message,
             "response": response,
             "retrieved_ids": new_ids,
+            "suggestions": suggestions[:8],
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
