@@ -59,7 +59,7 @@ VI_DIACRITICS = set("ăâđêôơưáàảãạắằẳẵặấầẩẫậé�
 
 BYPASS_EXPANSIONS = [
     (re.compile(r"\bđjt\b", re.IGNORECASE), "địt"),
-    (re.compile(r"\bdm\b", re.IGNORECASE), "địt mẹ"),
+    (re.compile(r"\bdm\b(?![a-z])", re.IGNORECASE), "địt mẹ"),
     (re.compile(r"\bđmm\b", re.IGNORECASE), "địt mẹ mày"),
     (re.compile(r"\bu\s+r\b", re.IGNORECASE), "you are"),
     (re.compile(r"\bur\b", re.IGNORECASE), "you are"),
@@ -89,7 +89,7 @@ VI_TOXIC_LEXICON = {
     "đồ ngu",
     "ngu",
     "óc chó",
-    "chó",
+    "đồ chó",
     "lồn",
     "cặc",
     "đmm",
@@ -157,7 +157,10 @@ class _HeuristicScorer:
     def __call__(self, text: str, **kwargs):
         normalized = _normalize_text(text)
         words = set(_word_tokens(normalized))
-        hits = sum(1 for word in EN_TOXIC_LEXICON | VI_TOXIC_LEXICON if word in normalized)
+        hits = sum(
+            1 for word in EN_TOXIC_LEXICON | VI_TOXIC_LEXICON
+            if re.search(rf"\b{re.escape(word)}\b", normalized)
+        )
 
         base = min(0.98, 0.12 + (0.18 * hits))
         if {"kill", "hate"} & words:
@@ -261,7 +264,11 @@ class ModerationModel(BaseModel):
 
     def _scan_lexicon(self, text: str) -> Dict[str, Any]:
         normalized = _normalize_text(text)
-        hits = [token for token in sorted(EN_TOXIC_LEXICON | VI_TOXIC_LEXICON, key=len, reverse=True) if token in normalized]
+        hits = []
+        for token in sorted(EN_TOXIC_LEXICON | VI_TOXIC_LEXICON, key=len, reverse=True):
+            pattern = rf"\b{re.escape(token)}\b"
+            if re.search(pattern, normalized):
+                hits.append(token)
         return {"normalized": normalized, "hits": hits, "safe": len(hits) == 0}
 
     def _token_language(self, token: str) -> str:
@@ -374,9 +381,9 @@ class ModerationModel(BaseModel):
             "threat": "threat",
             "hate": "hate",
             "identity_hate": "hate",
-            "neutral": "toxicity",
-            "clean": "toxicity",
-            "safe": "toxicity",
+            "neutral": "safe_score",
+            "clean": "safe_score",
+            "safe": "safe_score",
         }
 
         scores: Dict[str, float] = {}
@@ -388,13 +395,19 @@ class ModerationModel(BaseModel):
             score = float(item.get("score", 0.0))
             scores[mapped] = max(scores.get(mapped, 0.0), score)
 
+        if "safe_score" in scores:
+            scores["toxicity"] = min(
+                scores.get("toxicity", 0.0),
+                1.0 - scores["safe_score"]
+            )
+            del scores["safe_score"]
+
         if not scores:
             scores["toxicity"] = 0.0
         elif "toxicity" not in scores:
             scores["toxicity"] = max(scores.values())
 
         return scores
-
     def _classify_span(self, span: ModerationSpan, model_id: str) -> ModerationSpan:
         scorer = self._get_scorer(model_id)
         raw_output = scorer(span.text, truncation=True)
