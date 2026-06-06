@@ -1,7 +1,7 @@
 """Chat endpoint using chatbot model + search index."""
 
 import asyncio
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
@@ -76,7 +76,9 @@ def _format_doc(meta: dict) -> str:
     return snippet
 
 
-def retrieve(query: str, embeddings_model, exclude_ids: Optional[List[str]], top_k: int):
+
+
+def retrieve(query: str, embeddings_model, exclude_ids: Optional[List[str]], top_k: int) -> Tuple[List[str], List[str], List[dict]]:
     embedding = embeddings_model.embed(query)[0]
     candidate_k = max(top_k * 5, top_k)
     results = search_index.search(embedding, candidate_k)
@@ -84,6 +86,7 @@ def retrieve(query: str, embeddings_model, exclude_ids: Optional[List[str]], top
     exclude_set = set(exclude_ids or [])
     docs: List[str] = []
     new_ids: List[str] = []
+    metas: List[dict] = []
 
     for item in results:
         meta = item.get("metadata", {})
@@ -95,15 +98,16 @@ def retrieve(query: str, embeddings_model, exclude_ids: Optional[List[str]], top
             continue
         docs.append(formatted)
         new_ids.append(item_id)
+        metas.append(meta)
         if len(docs) >= top_k:
             break
 
-    return docs, new_ids
+    return docs, new_ids, metas
 
 
 def build_chat_prompt(q: str, history: List[ChatMessage], embeddings_model, exclude_ids: List[str], top_k: int):
     convo = _format_history(history)
-    retrieved_docs, new_ids = retrieve(q, embeddings_model, exclude_ids, top_k)
+    retrieved_docs, new_ids, retrieved_meta = retrieve(q, embeddings_model, exclude_ids, top_k)
 
     if not retrieved_docs:
         ctx = (
@@ -121,7 +125,7 @@ def build_chat_prompt(q: str, history: List[ChatMessage], embeddings_model, excl
         f"User: {q}\nAssistant:"
     )
 
-    return prompt, new_ids
+    return prompt, new_ids, retrieved_meta
 
 
 @router.post("")
@@ -136,7 +140,7 @@ async def chat(
             prompt = build_dictionary_prompt(request.message)
             new_ids: List[str] = []
         else:
-            prompt, new_ids = build_chat_prompt(
+            prompt, new_ids, _ = build_chat_prompt(
                 request.message,
                 request.history,
                 embeddings_model,
