@@ -13,113 +13,132 @@ StreamLand AI is a modular, production-ready API that orchestrates multiple stat
 | **Moderation** | Content Moderation + Detoxification | ✅ Active |
 | **Embeddings** | Semantic Search & Recommendations | ⏳ Planned |
 
-## 🚀 Quick Start
-
-### Installation
-
-```bash
-# Clone repository
-git clone <repo-url>
-cd streamland-ai
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Create environment file
-cp .env.example .env
-# Edit .env with your Hugging Face token and settings
-```
-
-### Running the API
-
-```bash
-# Start FastAPI server
-python -m api.server
-```
-
-API available at: `http://127.0.0.1:8000`
-
-### Quick Tests
-
-```bash
-# Health check
-curl http://127.0.0.1:8000/health
-
-# List models
-curl http://127.0.0.1:8000/models
-
-# Test Whisper locally
-python run.py
-```
-
-## 📁 Project Structure
-
-```
-streamland-ai/
-├── api/
-│   ├── server.py                  # FastAPI app & model initialization
-│   ├── model_registry.py          # Global model registry
-│   ├── dependencies.py            # Dependency injection for models
-│   └── endpoints/
-│       ├── transcribe.py          # Speech-to-text endpoint
-│       ├── summarize.py           # Text summarization endpoint
-│       ├── moderation.py          # Content moderation endpoint
-│
-├── models/
-│   ├── base.py                    # Abstract model interface
-│   ├── __init__.py                # Lazy-loading model imports
-│   ├── whisper/
-│   │   └── interface.py           # Whisper wrapper
-│   ├── summarization/
-│   │   └── interface.py           # Summarization wrapper
-│   ├── moderation/
-│   │   ├── interface.py           # Moderation engine
-│   │   └── __init__.py
-├── utils/
-│   ├── config.py                  # Centralized configuration
-│   ├── model_loader.py            # Dynamic model loading
-│   ├── model_pusher.py            # Push models to HF Hub
-│   └── pipeline.py                # Model orchestration
-│
-├── requirements.txt               # Python dependencies
-├── .env                           # Configuration (gitignored)
-├── .env.example                   # Environment template
-├── run.py                         # Local test script
-└── README.md                      # This file
-```
-
 ## 🔌 API Endpoints
 
 ### Health & Status
 
-```bash
-GET /health
-```
-Returns server status, GPU info, and loaded models.
+GET /health — returns server status, GPU info, and loaded models.
 
-```bash
-GET /models
-```
-Lists available and currently loaded models with metadata.
+GET /models — lists available and currently loaded models with metadata.
 
 ---
 
 ### 🎤 Speech-to-Text (Whisper)
 
-```bash
 POST /transcribe
-```
-**Input:** Audio file (MP3, WAV, FLAC)  
-**Query params:** `language` (optional)
 
-**Response:**
+Input (multipart/form-data): either an uploaded `file` or a `file_url` form field. Optional `language` form field.
+
+The endpoint returns a streaming NDJSON `application/x-ndjson` response with progress messages. The final message contains `status: "success"` and `data.result` with the transcription output returned by the Whisper model.
+
+Example:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/transcribe" \
+  -F "file=@path/to/audio.mp3" \
+  -F "language=en"
+```
+
+---
+
+### 📝 Text Summarization
+
+POST /summarize
+
+Request JSON body:
+
+```json
+{
+  "text": "Long document text..."
+}
+```
+
+Response JSON:
+
 ```json
 {
   "status": "success",
   "data": {
-    "filename": "audio.mp3",
-    "result": {
-      "text": "Full transcript here",
+    "input_length": 1234,
+    "summary": "Summarized text..."
+  },
+  "error": null
+}
+```
+
+Note: the summarization endpoint accepts plain text only (`text`) and will return an error for unsupported languages.
+
+---
+
+### 🔎 Search (Embeddings)
+
+POST /search
+
+Query parameters:
+- `query` (string, required)
+- `top_k` (int, optional, default 5)
+
+Response JSON contains `results` — a list of matched items (metadata and score).
+
+Example:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/search?query=education&top_k=5"
+```
+
+---
+
+### 💬 Chat
+
+POST /chat
+
+Request JSON:
+
+```json
+{
+  "message": "What is past perfect?",
+  "history": [{"role":"user","msg":"Hello"}],
+  "exclude_ids": [],
+  "top_k": 5
+}
+```
+
+Response JSON includes the model `response` and any `retrieved_ids` pulled from the search index.
+
+Example:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/chat" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"What is past perfect?","history":[],"exclude_ids":[],"top_k":5}'
+```
+
+---
+
+### 🛡️ Content Moderation
+
+POST /moderation/text
+
+Request JSON:
+
+```json
+{
+  "text": "Text to check"
+}
+```
+
+Response JSON contains a `moderation` object with `status`, `score`, `toxic_word`, and `categories`.
+
+POST /moderation/image
+
+Currently returns HTTP 501 (not implemented).
+
+Decision labels used by the moderation pipeline:
+- `SAFE` — content acceptable (score < `MODERATION_REVIEW_THRESHOLD`)
+- `REVIEW` — ambiguous content (between review and block thresholds)
+- `BLOCK` — content flagged as harmful (score ≥ `MODERATION_BLOCK_THRESHOLD`)
+
+---
       "language": "en",
       "timestamps": [
         {"start": 0.0, "text": "Full transcript"},

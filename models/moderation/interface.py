@@ -17,6 +17,8 @@ from functools import lru_cache
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
+import logging as _logging
+
 
 try:
     import torch
@@ -174,6 +176,7 @@ class ModerationModel(BaseModel):
 
     def __init__(self, model_path=None, from_hf=True):
         super().__init__(model_path or "staged-moderation", from_hf)
+        self.logger = _logging.getLogger(__name__)
         self.en_model_id = DEFAULT_EN_MODEL
         self.vi_model_id = DEFAULT_VI_MODEL
         self.full_model_id = DEFAULT_FULL_MODEL
@@ -195,8 +198,18 @@ class ModerationModel(BaseModel):
         return "moderation"
 
     def _load_model(self):
-        """Pipeline components are loaded lazily on demand."""
-        return None
+        """Eagerly load all pipeline components on startup."""
+        self.logger.info("[MODERATION] Preloading EN scorer...")
+        self._get_scorer(self.en_model_id)
+
+        self.logger.info("[MODERATION] Preloading VI scorer...")
+        self._get_scorer(self.vi_model_id)
+
+        self.logger.info("[MODERATION] Preloading embedding model...")
+        self._build_embedding_model()
+
+        self.logger.info("[MODERATION] All moderation components ready")
+        return self
 
     def process_input(self, input_data):
         if not isinstance(input_data, str):

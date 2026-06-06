@@ -52,8 +52,9 @@ class ModelLoader:
             module_path, class_name = ModelLoader.AVAILABLE_MODELS[model_type].rsplit('.', 1)
             module = __import__(module_path, fromlist=[class_name])
             model_class = getattr(module, class_name)
-            
-            return model_class(model_path=model_path, from_hf=from_hf, **kwargs)
+            instance = model_class(model_path=model_path, from_hf=from_hf, **kwargs)
+            instance._load_model()
+            return instance
         
         except Exception as e:
             raise ImportError(f"Failed to load model '{model_type}': {e}")
@@ -88,9 +89,9 @@ class ModelLoader:
     def list_available() -> Dict[str, str]:
         """Return dict of available models and their descriptions."""
         return {
-            "whisper": "Speech-to-Text (STT) - Detect giọng nói",
+            "whisper": "Speech-to-Text (STT) - Detect and transcribe audio",
             "embeddings": "Text Embeddings - Search & Recommendations",
             "chatbot": "Chatbot - Conversational QA",
             "moderation": "Content Moderation - Text & Image Safety",
-            "summarization": "Text Summarization - Tóm tắt nội dung",
+            "summarization": "Text Summarization - Summarize long text",
         }
