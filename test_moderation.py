@@ -126,9 +126,9 @@ def print_result(case_num: int, lang: str, text: str, description: str, result: 
         print(f"Response: {json.dumps(result, indent=2)}")
 
 
-def test_moderation(rewrite: bool = False) -> None:
+def test_moderation() -> None:
     """Run moderation tests."""
-    print_header(f"MODERATION TESTS (Rewrite: {rewrite})")
+    print_header("MODERATION TESTS")
     print(f"API Endpoint: {MODERATION_ENDPOINT}")
     
     results_summary = {
@@ -151,7 +151,6 @@ def test_moderation(rewrite: bool = False) -> None:
                 MODERATION_ENDPOINT,
                 json={
                     "text": text,
-                    "rewrite": rewrite,
                 },
                 timeout=30,
             )
@@ -310,15 +309,14 @@ def test_api_health() -> bool:
         return False
 
 
-def test_single(text: str, rewrite: bool = False) -> None:
+def test_single(text: str) -> None:
     """Test a single text for debugging."""
     print_header("SINGLE TEXT TEST")
     print(f"Text: {text}")
-    print(f"Rewrite: {rewrite}")
     print(f"Endpoint: {MODERATION_ENDPOINT}\n")
     
     try:
-        payload = {"text": text, "rewrite": rewrite}
+        payload = {"text": text}
         print(f"Request payload: {json.dumps(payload, indent=2, ensure_ascii=False)}")
         
         response = requests.post(
@@ -363,12 +361,5 @@ if __name__ == "__main__":
         text = sys.argv[2] if len(sys.argv) > 2 else "This is a test"
         test_single(text)
     else:
-        # Run tests without rewrite
-        test_moderation(rewrite=False)
+        test_moderation()
         
-        # Run tests with rewrite for REVIEW cases
-        print("\n\n")
-        print("▶" * 40)
-        print("Testing WITH detoxification (rewrite=true)")
-        print("▶" * 40)
-        test_moderation(rewrite=True)

@@ -104,7 +104,6 @@ VI_TOXIC_LEXICON = {
 DEFAULT_EN_MODEL = getattr(ModelConfig, "MODERATION_EN_MODEL", os.getenv("MODERATION_EN_MODEL", "s-nlp/roberta_toxicity_classifier"))
 DEFAULT_VI_MODEL = getattr(ModelConfig, "MODERATION_VI_MODEL", os.getenv("MODERATION_VI_MODEL", "cardiffnlp/twitter-xlm-roberta-base-offensive"))
 DEFAULT_FULL_MODEL = getattr(ModelConfig, "MODERATION_FULL_MODEL", os.getenv("MODERATION_FULL_MODEL", DEFAULT_VI_MODEL))
-DEFAULT_REWRITE_MODEL = getattr(ModelConfig, "MODERATION_REWRITE_MODEL", os.getenv("MODERATION_REWRITE_MODEL", "s-nlp/bart-base-detox"))
 DEFAULT_EMBEDDING_MODEL = getattr(ModelConfig, "MODERATION_EMBEDDING_MODEL", os.getenv("MODERATION_EMBEDDING_MODEL", "BAAI/bge-m3"))
 
 
@@ -183,7 +182,6 @@ class ModerationModel(BaseModel):
         self.en_model_id = DEFAULT_EN_MODEL
         self.vi_model_id = DEFAULT_VI_MODEL
         self.full_model_id = DEFAULT_FULL_MODEL
-        self.rewrite_model_id = DEFAULT_REWRITE_MODEL
         self.embedding_model_id = DEFAULT_EMBEDDING_MODEL
 
         self.greyzone_lower = float(os.getenv("MODERATION_GREYZONE_LOWER", "0.40"))
@@ -222,8 +220,8 @@ class ModerationModel(BaseModel):
     def infer(self, processed_input):
         return self.moderate_text(processed_input)
 
-    def moderate_text(self, text, rewrite: bool = True):
-        return self.evaluate(text, rewrite=rewrite)
+    def moderate_text(self, text):
+        return self.evaluate(text)
 
     def moderate_image(self, image_path):
         raise NotImplementedError("Image moderation is not implemented in this flow")
@@ -512,42 +510,7 @@ class ModerationModel(BaseModel):
             return REVIEW
         return SAFE
 
-    def _rewrite_span(self, text: str, lang: str) -> str:
-        replacements = [
-            (r"\bidiot\b", "person"),
-            (r"\bstupid\b", "unhelpful"),
-            (r"\bdumb\b", "unclear"),
-            (r"\bfuck\b", "heck"),
-            (r"\bshit\b", "mess"),
-            (r"địt mẹ", ""),
-            (r"địt", ""),
-            (r"đồ ngu", "không phù hợp"),
-            (r"ngu", "chưa phù hợp"),
-            (r"óc chó", "không phù hợp"),
-        ]
-
-        rewritten = text
-        for pattern, replacement in replacements:
-            rewritten = re.sub(pattern, replacement, rewritten, flags=re.IGNORECASE)
-
-        rewritten = re.sub(r"\s+", " ", rewritten).strip()
-        if not rewritten:
-            return "[content removed]"
-        if lang == "vi" and rewritten == text:
-            return text
-        return rewritten
-
-    def _rewrite_review_text(self, original_text: str, scored_spans: List[ModerationSpan]) -> str:
-        revised = original_text
-        for span in scored_spans:
-            if span.score < self.review_threshold:
-                continue
-            replacement = self._rewrite_span(span.text, span.lang)
-            if replacement and replacement != span.text:
-                revised = revised.replace(span.text, replacement)
-        return re.sub(r"\s+", " ", revised).strip()
-
-    def evaluate(self, text: str, rewrite: bool = True, skip_rag: bool = False) -> Dict[str, Any]:
+    def evaluate(self, text: str, skip_rag: bool = False) -> Dict[str, Any]:
         lexicon_result = self._scan_lexicon(text)
         normalized = lexicon_result["normalized"]
         if lexicon_result["safe"]:

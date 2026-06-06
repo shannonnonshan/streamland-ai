@@ -19,7 +19,6 @@ class ModelConfig:
     MODERATION_EN_MODEL = os.getenv("MODERATION_EN_MODEL", "s-nlp/roberta_toxicity_classifier")
     MODERATION_VI_MODEL = os.getenv("MODERATION_VI_MODEL", "cardiffnlp/twitter-xlm-roberta-base-offensive")
     MODERATION_FULL_MODEL = os.getenv("MODERATION_FULL_MODEL", MODERATION_VI_MODEL)
-    MODERATION_REWRITE_MODEL = os.getenv("MODERATION_REWRITE_MODEL", "s-nlp/bart-base-detox")
     MODERATION_EMBEDDING_MODEL = os.getenv("MODERATION_EMBEDDING_MODEL", "BAAI/bge-m3")
     MODERATION_GREYZONE_LOWER = float(os.getenv("MODERATION_GREYZONE_LOWER", "0.40"))
     MODERATION_GREYZONE_UPPER = float(os.getenv("MODERATION_GREYZONE_UPPER", "0.70"))

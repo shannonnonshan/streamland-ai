@@ -240,7 +240,6 @@ SUMMARIZATION_DEVICE=auto
 MODERATION_EN_MODEL=s-nlp/roberta_toxicity_classifier
 MODERATION_VI_MODEL=cardiffnlp/twitter-xlm-roberta-base-offensive
 MODERATION_FULL_MODEL=cardiffnlp/twitter-xlm-roberta-base-offensive
-MODERATION_REWRITE_MODEL=s-nlp/bart-base-detox
 MODERATION_EMBEDDING_MODEL=BAAI/bge-m3
 MODERATION_BLOCK_THRESHOLD=0.85
 MODERATION_REVIEW_THRESHOLD=0.55
@@ -309,8 +308,7 @@ The moderation system uses a 10-stage pipeline:
 6. **Grey-zone RAG** - For ambiguous scores (0.40-0.70), retrieve similar examples and nudge
 7. **Score Fusion** - Combine scores: 50% max + 30% mean + 20% full-sentence
 8. **Decision Making** - SAFE/REVIEW/BLOCK based on thresholds
-9. **Rewrite** (optional) - Detoxify REVIEW-level content using detox models
-10. **Re-score** - Validate rewritten text
+9. **Re-score** - Validate rewritten text
 
 ---
 
