@@ -70,6 +70,27 @@ class ChatResponse(BaseModel):
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
+def get_teacher_from_video_id(video_id: Optional[str], search_index) -> str:
+    """Lấy teacher name từ current_video_id qua FAISS metadata."""
+    if not video_id:
+        return ""
+    try:
+        if search_index.index is None:
+            search_index.load()
+        for meta in search_index.metadata:
+            if str(meta.get("id", "")) == video_id:
+                return meta.get("teacher_name") or meta.get("teacher") or ""
+    except Exception:
+        pass
+    return ""
+
+def is_teacher_query(q: str) -> bool:
+    q_lower = q.lower()
+    return any(p in q_lower for p in [
+        "by this teacher", "same teacher", "more by", "videos by",
+        "by the teacher", "from this teacher", "of this teacher"
+    ])
+
 def is_definition_query(q: str) -> bool:
     q_lower = q.lower().strip()
     if any(p in q_lower for p in DICT_PATTERNS):
@@ -240,6 +261,21 @@ async def chat(
                 word = word.lower().replace(p, "").strip()
             word = word.replace("?", "").strip() or request.message
             prompt = build_dictionary_prompt(word)
+        elif is_teacher_query(request.message):
+            # Lấy teacher từ current_video_id (chính xác hơn parse history)
+            teacher_name = get_teacher_from_video_id(request.current_video_id, search_index)
+            enriched_message = request.message
+            if teacher_name:
+                enriched_message = f"Recommend videos by teacher {teacher_name}"
+            prompt, new_ids, video_cards = build_chat_prompt(
+                enriched_message,
+                request.history,
+                embeddings_model,
+                request.exclude_ids,
+                request.top_k,
+                request.current_video_id,
+                request.current_video_title,
+            )
         else:
             prompt, new_ids, video_cards = build_chat_prompt(
                 request.message,
@@ -252,6 +288,15 @@ async def chat(
             )
 
         response_text = await asyncio.to_thread(model.generate, prompt)
+
+        # Strip markdown links khỏi text nếu đã có video_cards
+        # Model được train để output markdown format — cần clean để tránh render duplicate
+        import re
+        if video_cards:
+            response_text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', response_text)
+            # Bỏ các dòng chỉ chứa link /student/... hoặc http://
+            response_text = re.sub(r'\n?-?\s*(https?://\S+|/student/\S+)\s*', '', response_text)
+            response_text = response_text.strip()
 
         return ChatResponse(
             status="success",
