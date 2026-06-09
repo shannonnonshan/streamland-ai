@@ -18,6 +18,7 @@ from api.endpoints import transcribe, chat, summarize, moderation
 from api.endpoints import search as search_endpoint
 from utils.config import ModelConfig
 from utils.model_loader import ModelLoader
+from api.endpoints.admin import router as admin_router
 
 # =========================
 # Load env
@@ -56,6 +57,8 @@ app = FastAPI(
     description="AI inference API",
     version="1.0.0"
 )
+
+app.include_router(admin_router)
 
 # =========================
 # CORS

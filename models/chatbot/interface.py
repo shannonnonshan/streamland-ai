@@ -200,9 +200,9 @@ class ChatbotModel(BaseModel):
                 pad_token_id=self.tokenizer.eos_token_id,
             )
 
-        text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-        answer = text[len(processed_input) :].strip()
-        answer = answer.split("User:")[0].strip()
+        input_length = inputs["input_ids"].shape[1]
+        new_tokens = outputs[0][input_length:]
+        answer = self.tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
 
         return {"response": answer}
 
