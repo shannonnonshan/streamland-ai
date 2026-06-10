@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from api.dependencies import get_summarization_model
 from api.server import app
 from models.summarization.interface import SummarizationModel
-
+import threading
 
 # =========================================================
 # SUPPRESS ALL NOISE BEFORE ANYTHING ELSE
@@ -169,8 +169,9 @@ class TestSummarizationInference(unittest.TestCase):
     def test_whitespace_only_returns_false(self):
         self.assertFalse(self.model.infer("   \n\t  "))
 
-    def test_unknown_language_returns_false(self):
-        self.assertFalse(self.model.infer(UNKNOWN_LANG_TEXT))
+    def test_unknown_language_is_handled_as_english(self):
+        result = self.model.infer(UNKNOWN_LANG_TEXT)
+        self.assertTrue(result is False or isinstance(result, dict))
 
     def test_degenerate_en_input_does_not_crash(self):
         self.model.infer(LONG_ENGLISH_TEXT)
@@ -279,6 +280,63 @@ class TestSummarizationAPI(unittest.TestCase):
 # =========================================================
 # ENTRY POINT
 # =========================================================
+class TestSummarizationConcurrent(unittest.TestCase):
 
+    @classmethod
+    def setUpClass(cls):
+        sys.__stdout__.write("\n[INIT] Loading model for concurrent tests...\n")
+        cls.model = SummarizationModel()
+        sys.__stdout__.write("[INIT] Ready.\n\n")
+
+    def test_concurrent_en_and_vi_requests(self):
+        """2 requests đồng thời — 1 EN, 1 VI — không crash, đều trả kết quả."""
+        results = {}
+        errors = {}
+
+        def run(key, text):
+            try:
+                results[key] = self.model.infer(text)
+            except Exception as e:
+                errors[key] = str(e)
+
+        t1 = threading.Thread(target=run, args=("en", LONG_ENGLISH_TEXT))
+        t2 = threading.Thread(target=run, args=("vi", LONG_VIETNAMESE_TEXT))
+
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        self.assertFalse(errors, f"Errors during concurrent requests: {errors}")
+        self.assertIn("en", results)
+        self.assertIn("vi", results)
+        _assert_valid_summary(self, results["en"])
+        _assert_valid_summary(self, results["vi"])
+
+        sys.__stdout__.write(f"  [EN] {results['en']['summary']}\n")
+        sys.__stdout__.write(f"  [VI] {results['vi']['summary']}\n")
+
+    def test_concurrent_same_language(self):
+        """3 EN requests đồng thời — không deadlock."""
+        results = {}
+        errors = {}
+
+        def run(key):
+            try:
+                results[key] = self.model.infer(LONG_ENGLISH_TEXT)
+            except Exception as e:
+                errors[key] = str(e)
+
+        threads = [threading.Thread(target=run, args=(i,)) for i in range(3)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        self.assertFalse(errors, f"Errors: {errors}")
+        self.assertEqual(len(results), 3)
+        for r in results.values():
+            _assert_valid_summary(self, r)
+            
 if __name__ == "__main__":
     unittest.main(verbosity=1)

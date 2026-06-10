@@ -3,14 +3,18 @@ import shutil
 import re
 import importlib
 import logging
-from typing import Any, Dict, Union, Optional
+from typing import Any, Union
 
 import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, pipeline
 from langdetect import detect, LangDetectException
 
 from models.base import BaseModel
-
+import threading
+import gc
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="transformers")
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 HF_TOKEN = os.getenv("HF_TOKEN")
 logger = logging.getLogger(__name__)
@@ -43,11 +47,24 @@ class SummarizationModel(BaseModel):
 
         self.tokenizer = None
         self.model = None
+        self.vi_model = None
+        self.vi_tokenizer = None
+        self.vi_summarizer = None
+
+        self.en_model = None
+        self.en_tokenizer = None
+        self.en_summarizer = None
+
         self.summarizer = None
         self.current_language = None
         self.current_pipeline_task = None
-
+        self._model_lock = threading.Lock()
+        self._vi_load_lock = threading.Lock()
         self._load_model()
+        self.en_model = self.model
+        self.en_tokenizer = self.tokenizer
+        self.en_summarizer = self.summarizer
+        self.current_language = "en"
 
     # =====================================================
     # DEVICE
@@ -159,37 +176,48 @@ class SummarizationModel(BaseModel):
         return "en"
 
 
-    def _switch_model_for_language(self, language: str):
-        if language not in self.SUPPORTED_MODELS:
-            return False
-        target_model = self.SUPPORTED_MODELS[language]
-        if self.current_language == language:
+    
+    def _switch_model_for_language(self, language):
+        if language == "en":
+            if self.vi_model is not None:
+                del self.vi_model
+                del self.vi_tokenizer
+                if self.vi_summarizer:
+                    del self.vi_summarizer
+                self.vi_model = None
+                self.vi_tokenizer = None
+                self.vi_summarizer = None
+                gc.collect()
+
+            self.model = self.en_model
+            self.tokenizer = self.en_tokenizer
+            self.summarizer = self.en_summarizer
+            self.current_language = "en"
+            self.model_path = self.SUPPORTED_MODELS["en"]
             return True
-        if self.model_path == target_model:
-            self.current_language = language
+
+        if language == "vi":
+            if self.vi_model is None:
+                with self._vi_load_lock:
+                    if self.vi_model is None:
+                        old_path = self.model_path
+                        self.model_path = self.SUPPORTED_MODELS["vi"]
+                        self._load_model()
+                        self.vi_model = self.model
+                        self.vi_tokenizer = self.tokenizer
+                        self.vi_summarizer = self.summarizer
+                        self.model_path = old_path
+
+            self.model = self.vi_model
+            self.tokenizer = self.vi_tokenizer
+            self.summarizer = self.vi_summarizer
+            self.current_language = "vi"
+            self.model_path = self.SUPPORTED_MODELS["vi"]
             return True
 
-        logger.info("Switching model: %s -> %s", self.model_path, target_model)
-
-        if self.model is not None:
-            del self.model
-            self.model = None
-        if self.tokenizer is not None:
-            del self.tokenizer
-            self.tokenizer = None
-        if self.summarizer is not None:
-            del self.summarizer
-            self.summarizer = None
-        import gc
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-
-        self.model_path = target_model
-        self._load_model()
-        self.current_language = language
-        return True
-
+        return False
+    
+    
     @property
     def model_type(self) -> str:
         return "summarization"
@@ -315,22 +343,11 @@ class SummarizationModel(BaseModel):
         language = self.detect_language(processed_input)
         if language is None:
             return False
-        if not self._switch_model_for_language(language):
-            return False
 
-        result = {"summary": self.summarize(processed_input)}
-
-        if self.current_language == "vi":
-            del self.model
-            del self.tokenizer
-            if self.summarizer:
-                del self.summarizer
-            self.model = None
-            self.tokenizer = None
-            self.summarizer = None
-            self.current_language = None
-            import gc
-            gc.collect()
+        with self._model_lock:  # serialize — chỉ 1 request chạy tại 1 thời điểm
+            if not self._switch_model_for_language(language):
+                return False
+            result = {"summary": self.summarize(processed_input)}
 
         return result
 
@@ -504,7 +521,7 @@ class SummarizationModel(BaseModel):
     # SUMMARIZE
     # =====================================================
 
-    def summarize(self, text, max_length=180, min_length=20, as_prompt=False):
+    def summarize(self, text, max_length=120, min_length=20, as_prompt=False):
         if not text or not str(text).strip():
             return ""
 
@@ -517,7 +534,7 @@ class SummarizationModel(BaseModel):
         adjusted_min_tokens = min(max(15, int(min_length)), adjusted_max_tokens - 10)
 
         try:
-            is_bart_model = "bart" in str(self.model_path).lower()
+            is_bart_model = self.current_language == "en"
 
             if is_bart_model:
                 summary = self._generate_with_model(
