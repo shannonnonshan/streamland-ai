@@ -168,7 +168,23 @@ class SummarizationModel(BaseModel):
         if self.model_path == target_model:
             self.current_language = language
             return True
+
         logger.info("Switching model: %s -> %s", self.model_path, target_model)
+
+        if self.model is not None:
+            del self.model
+            self.model = None
+        if self.tokenizer is not None:
+            del self.tokenizer
+            self.tokenizer = None
+        if self.summarizer is not None:
+            del self.summarizer
+            self.summarizer = None
+        import gc
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
         self.model_path = target_model
         self._load_model()
         self.current_language = language
@@ -208,6 +224,7 @@ class SummarizationModel(BaseModel):
             "cache_dir": self.cache_dir,
             "force_download": force_download,
             "torch_dtype": self.torch_dtype,
+            "low_cpu_mem_usage": True,
         }
         if HF_TOKEN:
             tokenizer_kwargs["token"] = HF_TOKEN
@@ -293,14 +310,30 @@ class SummarizationModel(BaseModel):
             return input_data.decode("utf-8", errors="ignore")
         return str(input_data)
 
-    def infer(self, processed_input: str) -> Union[Dict[str, Any], bool]:
+    def infer(self, processed_input: str):
         processed_input = self._strip_instruction_wrapper(processed_input)
         language = self.detect_language(processed_input)
         if language is None:
             return False
         if not self._switch_model_for_language(language):
             return False
-        return {"summary": self.summarize(processed_input)}
+
+        result = {"summary": self.summarize(processed_input)}
+
+        if self.current_language == "vi":
+            del self.model
+            del self.tokenizer
+            if self.summarizer:
+                del self.summarizer
+            self.model = None
+            self.tokenizer = None
+            self.summarizer = None
+            self.current_language = None
+            import gc
+            gc.collect()
+
+        return result
+
 
     # =====================================================
     # POST-PROCESS: TRIM TO COMPLETE SENTENCE
