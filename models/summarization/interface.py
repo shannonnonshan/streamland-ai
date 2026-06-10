@@ -340,16 +340,19 @@ class SummarizationModel(BaseModel):
 
     def infer(self, processed_input: str):
         processed_input = self._strip_instruction_wrapper(processed_input)
+        
+        if not processed_input or not processed_input.strip():
+            return False
+        
         language = self.detect_language(processed_input)
         if language is None:
             return False
 
-        with self._model_lock:  # serialize — chỉ 1 request chạy tại 1 thời điểm
+        with self._model_lock:
             if not self._switch_model_for_language(language):
                 return False
             result = {"summary": self.summarize(processed_input)}
 
-        return result
 
 
     # =====================================================
