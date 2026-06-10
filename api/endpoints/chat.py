@@ -91,6 +91,18 @@ def is_teacher_query(q: str) -> bool:
         "by the teacher", "from this teacher", "of this teacher"
     ])
 
+def is_recommend_query(q: str) -> bool:
+    """Chỉ trả video_cards khi user thật sự muốn recommend."""
+    q_lower = q.lower()
+    return any(p in q_lower for p in [
+        "recommend", "suggest", "video hay", "gợi ý", "tìm video",
+        "show me videos", "find videos", "what should i watch",
+        "nên xem", "video nào", "video về", "videos about",
+        "videos on", "more videos", "thêm video", "video nữa",
+        "what to watch", "learning resources", "tài liệu học",
+        "by this teacher", "same teacher", "more by",
+    ])
+
 def is_definition_query(q: str) -> bool:
     q_lower = q.lower().strip()
     if any(p in q_lower for p in DICT_PATTERNS):
@@ -193,6 +205,7 @@ def build_chat_prompt(
     top_k: int,
     current_video_id: Optional[str],
     current_video_title: Optional[str],
+    force_retrieve: bool = False,
 ) -> Tuple[str, List[str], List[VideoCard]]:
     """Build prompt đầy đủ với history + context video + retrieved docs."""
 
@@ -203,20 +216,26 @@ def build_chat_prompt(
     if current_video_title:
         video_context = f"The student is currently watching: \"{current_video_title}\"\n"
 
-    retrieved_docs, new_ids, cards = retrieve(
-        q,
-        embeddings_model,
-        exclude_ids,
-        top_k,
-        boost_id=current_video_id,
-    )
+    new_ids: List[str] = []
+    cards: List[VideoCard] = []
+    ctx = ""
 
-    if retrieved_docs:
-        ctx = "Relevant videos from StreamLand:\n" + "\n---\n".join(retrieved_docs[:top_k])
-    else:
-        ctx = "No specific videos found. Answer from general knowledge."
-
-    # Prompt format dùng Qwen2 chat template
+    # Chỉ retrieve khi query thật sự cần recommend video
+    if force_retrieve or is_recommend_query(q):
+        retrieved_docs, new_ids, cards = retrieve(
+            q,
+            embeddings_model,
+            exclude_ids,
+            top_k,
+            boost_id=current_video_id,
+        )
+        if retrieved_docs:
+            ctx = "Relevant videos from StreamLand:\n" + "\n---\n".join(retrieved_docs[:top_k])
+    elif current_video_title:
+        # Không recommend nhưng vẫn có context video đang xem
+        ctx = f"Context: Student is watching \"{current_video_title}\". Answer their question directly."
+    
+    # Prompt format
     prompt = (
         f"{SYSTEM_PROMPT}\n\n"
         f"{video_context}"
@@ -262,11 +281,8 @@ async def chat(
             word = word.replace("?", "").strip() or request.message
             prompt = build_dictionary_prompt(word)
         elif is_teacher_query(request.message):
-            # Lấy teacher từ current_video_id (chính xác hơn parse history)
             teacher_name = get_teacher_from_video_id(request.current_video_id, search_index)
-            enriched_message = request.message
-            if teacher_name:
-                enriched_message = f"Recommend videos by teacher {teacher_name}"
+            enriched_message = f"Recommend videos by teacher {teacher_name}" if teacher_name else request.message
             prompt, new_ids, video_cards = build_chat_prompt(
                 enriched_message,
                 request.history,
@@ -275,8 +291,10 @@ async def chat(
                 request.top_k,
                 request.current_video_id,
                 request.current_video_title,
+                force_retrieve=True,
             )
         else:
+            # General Q&A — không tự động recommend video
             prompt, new_ids, video_cards = build_chat_prompt(
                 request.message,
                 request.history,
@@ -285,6 +303,7 @@ async def chat(
                 request.top_k,
                 request.current_video_id,
                 request.current_video_title,
+                force_retrieve=False,  # chỉ retrieve nếu is_recommend_query() = True
             )
 
         response_text = await asyncio.to_thread(model.generate, prompt)
