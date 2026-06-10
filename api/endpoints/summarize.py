@@ -1,6 +1,5 @@
-"""Summarization endpoint."""
-
 import logging
+import asyncio
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, field_validator
@@ -27,14 +26,24 @@ async def summarize(
     request: SummarizeRequest,
     model=Depends(get_summarization_model),
 ):
-    """Summarize input text using the loaded summarization model."""
-    text = request.text  # already stripped by validator
-
+    text = request.text
     logger.info("Summarize request received: input_length=%d", len(text))
 
     try:
-        result = model.infer(text)
-
+        result = await asyncio.wait_for(
+            asyncio.to_thread(model.infer, text),
+            timeout=120.0,
+        )
+    except asyncio.TimeoutError:
+        logger.warning("Summarize timed out: input_length=%d", len(text))
+        raise HTTPException(
+            status_code=504,
+            detail={
+                "status": "error",
+                "data": None,
+                "error": "Summarization timed out — server is busy, please try again",
+            },
+        )
     except Exception:
         logger.exception("Summarize model.infer() crashed: input_length=%d", len(text))
         raise HTTPException(
