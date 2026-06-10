@@ -200,9 +200,11 @@ class ChatbotModel(BaseModel):
                 pad_token_id=self.tokenizer.eos_token_id,
             )
 
+        # Slice theo token index — tránh lệch do encode/decode whitespace
         input_length = inputs["input_ids"].shape[1]
         new_tokens = outputs[0][input_length:]
         answer = self.tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+        answer = answer.split("User:")[0].strip()
 
         return {"response": answer}
 
