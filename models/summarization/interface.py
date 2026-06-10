@@ -353,7 +353,7 @@ class SummarizationModel(BaseModel):
                 return False
             result = {"summary": self.summarize(processed_input)}
 
-
+        return result
 
     # =====================================================
     # POST-PROCESS: TRIM TO COMPLETE SENTENCE
