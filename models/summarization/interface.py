@@ -7,7 +7,7 @@ from typing import Any, Union
 
 import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, pipeline
-from langdetect import detect, LangDetectException
+from langdetect import detect, LangDetectException, language
 
 from models.base import BaseModel
 import threading
@@ -45,27 +45,55 @@ class SummarizationModel(BaseModel):
         self.cache_dir = os.getenv("SUMMARIZATION_CACHE_DIR", DEFAULT_CACHE_DIR)
         self.device, self.device_label, self.torch_dtype, self.pipeline_device = self._resolve_device()
 
-        self.tokenizer = None
+        # private per-language cache
+        self._en_model = None
+        self._en_tokenizer = None
+        self._en_summarizer = None
+        self._vi_model = None
+        self._vi_tokenizer = None
+        self._vi_summarizer = None
+
+        # giữ lại để các method cũ (summarize, _generate_with_model) không bị vỡ
         self.model = None
-        self.vi_model = None
-        self.vi_tokenizer = None
-        self.vi_summarizer = None
-
-        self.en_model = None
-        self.en_tokenizer = None
-        self.en_summarizer = None
-
+        self.tokenizer = None
         self.summarizer = None
         self.current_language = None
         self.current_pipeline_task = None
+        self.model_path = model_path or "shannonnonshan/bart-summarizer"
+
         self._model_lock = threading.Lock()
         self._vi_load_lock = threading.Lock()
-        self._load_model()
-        self.en_model = self.model
-        self.en_tokenizer = self.tokenizer
-        self.en_summarizer = self.summarizer
-        self.current_language = "en"
+        self._en_load_lock = threading.Lock()
 
+        # Chỉ load EN khi khởi động
+        
+        self._ensure_model("en")
+    def _ensure_model(self, language: str):
+        if language == "en":
+            if self._en_model is not None:
+                return
+            with self._en_load_lock:
+                if self._en_model is not None:
+                    return
+                self.model_path = self.SUPPORTED_MODELS["en"]
+                self._load_model()
+                self._en_model = self.model
+                self._en_tokenizer = self.tokenizer
+                self._en_summarizer = self.summarizer
+                logger.info("EN model loaded and cached")
+
+        elif language == "vi":
+            if self._vi_model is not None:
+                return
+            with self._vi_load_lock:
+                if self._vi_model is not None:
+                    return
+                self.model_path = self.SUPPORTED_MODELS["vi"]
+                self._load_model()
+                self._vi_model = self.model
+                self._vi_tokenizer = self.tokenizer
+                self._vi_summarizer = self.summarizer
+                logger.info("VI model loaded and cached")
     # =====================================================
     # DEVICE
     # =====================================================
@@ -283,7 +311,8 @@ class SummarizationModel(BaseModel):
 
         model = AutoModelForSeq2SeqLM.from_pretrained(candidate, **model_kwargs)
         model = model.to(self.device)
-
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         self.tokenizer = tokenizer
         self.model = model
 
@@ -340,17 +369,28 @@ class SummarizationModel(BaseModel):
 
     def infer(self, processed_input: str):
         processed_input = self._strip_instruction_wrapper(processed_input)
-        
+
         if not processed_input or not processed_input.strip():
             return False
-        
+
         language = self.detect_language(processed_input)
         if language is None:
             return False
 
+        self._ensure_model(language)
+
         with self._model_lock:
-            if not self._switch_model_for_language(language):
-                return False
+            if language == "en":
+                self.model = self._en_model
+                self.tokenizer = self._en_tokenizer
+                self.summarizer = self._en_summarizer
+            else:
+                self.model = self._vi_model
+                self.tokenizer = self._vi_tokenizer
+                self.summarizer = self._vi_summarizer
+            self.current_language = language
+            self.model_path = self.SUPPORTED_MODELS[language]
+
             result = {"summary": self.summarize(processed_input)}
 
         return result
