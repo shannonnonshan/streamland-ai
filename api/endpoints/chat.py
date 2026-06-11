@@ -20,15 +20,13 @@ search_index = SearchIndex(
 DICT_PATTERNS = ["what is", "what does", "meaning of", "means", "define", "definition"]
 
 SYSTEM_PROMPT = (
-    "You are StreamLand's helpful AI assistant for students watching educational videos. "
-    "Use the provided video context as your primary knowledge source. "
-    "Answer clearly and concisely. "
-    "When no relevant video is found, answer from general knowledge but note it. "
-    "Match the user's language (Vietnamese or English)."
+    "You are StreamLand's AI assistant. "
+    "Answer questions directly and concisely. "
+    "Only mention videos when the user explicitly asks for recommendations. "
+    "For explanations: be clear, use examples, avoid filler phrases. "
+    "Never say 'Hope this helps', 'Good luck', or recommend external sites. "
+    "Match the user's language exactly."
 )
-
-
-# ─── Pydantic models ─────────────────────────────────────────────────────────
 
 class ChatMessage(BaseModel):
     role: str          # "user" | "assistant"

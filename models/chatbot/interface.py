@@ -186,9 +186,16 @@ class ChatbotModel(BaseModel):
         inputs = self.tokenizer(processed_input, return_tensors="pt", truncation=True)
         inputs = {key: value.to(self.device) for key, value in inputs.items()}
 
-        max_new_tokens = int(os.getenv("CHATBOT_MAX_NEW_TOKENS", "500"))
-        temperature = float(os.getenv("CHATBOT_TEMPERATURE", "0.5"))
+        max_new_tokens = int(os.getenv("CHATBOT_MAX_NEW_TOKENS", "300"))
+        temperature = float(os.getenv("CHATBOT_TEMPERATURE", "0.3"))
         top_p = float(os.getenv("CHATBOT_TOP_P", "0.9"))
+
+        # Stop tokens để tránh model generate lan man
+        stop_token_ids = [self.tokenizer.eos_token_id]
+        for token in ["<|im_end|>", "<|endoftext|>", "\nUser:", "\nHuman:", "Human:"]:
+            tid = self.tokenizer.convert_tokens_to_ids(token)
+            if tid and tid != self.tokenizer.unk_token_id:
+                stop_token_ids.append(tid)
 
         with torch.no_grad():
             outputs = self.model.generate(
@@ -197,14 +204,16 @@ class ChatbotModel(BaseModel):
                 temperature=temperature,
                 top_p=top_p,
                 do_sample=True,
+                eos_token_id=stop_token_ids,
                 pad_token_id=self.tokenizer.eos_token_id,
+                repetition_penalty=1.1,
             )
 
-        # Slice theo token index — tránh lệch do encode/decode whitespace
+        # Slice theo token index — không echo lại prompt
         input_length = inputs["input_ids"].shape[1]
         new_tokens = outputs[0][input_length:]
         answer = self.tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
-        answer = answer.split("User:")[0].strip()
+        answer = answer.split("User:")[0].split("Human:")[0].strip()
 
         return {"response": answer}
 
