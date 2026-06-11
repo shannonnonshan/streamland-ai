@@ -20,13 +20,16 @@ search_index = SearchIndex(
 DICT_PATTERNS = ["what is", "what does", "meaning of", "means", "define", "definition"]
 
 SYSTEM_PROMPT = (
-    "You are StreamLand's AI assistant. "
-    "Answer questions directly and concisely. "
-    "Only mention videos when the user explicitly asks for recommendations. "
-    "For explanations: be clear, use examples, avoid filler phrases. "
-    "Never say 'Hope this helps', 'Good luck', or recommend external sites. "
-    "Match the user's language exactly."
+    "You are StreamLand's helpful AI assistant for students watching educational videos. "
+    "IMPORTANT: When recommending videos, ONLY recommend videos explicitly listed in the context. "
+    "Do NOT invent video titles or recommend videos not in the provided list. "
+    "Answer clearly and concisely. "
+    "When no relevant video is found, answer from general knowledge but note it. "
+    "Match the user's language (Vietnamese or English)."
 )
+
+
+# ─── Pydantic models ─────────────────────────────────────────────────────────
 
 class ChatMessage(BaseModel):
     role: str          # "user" | "assistant"
@@ -228,7 +231,14 @@ def build_chat_prompt(
             boost_id=current_video_id,
         )
         if retrieved_docs:
-            ctx = "Relevant videos from StreamLand:\n" + "\n---\n".join(retrieved_docs[:top_k])
+            ctx = (
+                "Available StreamLand videos for this query:\n"
+                + "\n".join([
+                    f"[{i+1}] {doc}"
+                    for i, doc in enumerate(retrieved_docs[:top_k])
+                ])
+                + "\n\nOnly recommend from the list above."
+            )
     elif current_video_title:
         # Không recommend nhưng vẫn có context video đang xem
         ctx = f"Context: Student is watching \"{current_video_title}\". Answer their question directly."
